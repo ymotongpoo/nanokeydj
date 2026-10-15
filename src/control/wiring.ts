@@ -18,6 +18,7 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
     const strip = engine.mixer.channels[id];
 
     registry.setHandler(`deck.${id}.play`, () => deck.togglePlay());
+    registry.setHandler(`deck.${id}.sync`, () => deck.sync(engine.decks[otherDeck(id)]));
     registry.setHandler(`deck.${id}.tempo`, (v) =>
       deck.setTempoRate(tempoRate(v, engine.tempoRange, engine.tempoInvert)),
     );
@@ -39,6 +40,10 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
   registry.setHandler('mixer.crossfader', (v) => engine.mixer.setCrossfader(v));
   registry.setHandler('mixer.master', (v) => engine.mixer.setMaster(v));
   registry.setHandler('focused.play', () => focusedDeck().togglePlay());
+  registry.setHandler('focused.sync', () => {
+    const deck = focusedDeck();
+    deck.sync(engine.decks[otherDeck(deck.id)]);
+  });
 
   for (const [id, value] of Object.entries(INITIAL_VALUES)) registry.dispatch(id, value);
 }

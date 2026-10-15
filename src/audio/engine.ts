@@ -1,6 +1,8 @@
 import { DECK_IDS, type DeckId } from '../control/controls';
+import { analyzeBpm } from './bpm-client';
 import { Deck } from './deck';
 import { Mixer } from './mixer';
+import { mixToMono } from './peaks';
 
 export interface DeckBuffers {
   A: AudioBuffer | null;
@@ -40,6 +42,18 @@ export class Engine {
 
   async loadFile(deck: DeckId, file: File): Promise<void> {
     const buffer = await this.decode(await file.arrayBuffer());
-    this.decks[deck].load(buffer, file.name.replace(/\.[^.]+$/, ''));
+    this.loadBuffer(deck, buffer, file.name.replace(/\.[^.]+$/, ''));
+  }
+
+  /** デッキに曲を載せ、BPM の解析を裏で始める。解析中に別の曲へ替わっていたら結果は捨てる。 */
+  loadBuffer(id: DeckId, buffer: AudioBuffer, name: string): void {
+    const deck = this.decks[id];
+    deck.load(buffer, name);
+    deck.setAnalyzing(true);
+    void analyzeBpm(mixToMono(buffer), buffer.sampleRate).then((result) => {
+      if (deck.audio !== buffer) return;
+      deck.setAnalyzing(false);
+      if (result) deck.setAnalysis(result.bpm, result.firstBeat);
+    });
   }
 }

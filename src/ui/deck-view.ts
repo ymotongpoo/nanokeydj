@@ -1,5 +1,6 @@
 import { createDemoBuffer, DEMO_TRACKS } from '../audio/demo';
 import type { Engine } from '../audio/engine';
+import { beatTimesIn } from '../audio/beatgrid';
 import { computePeaks, mixToMono, type Peaks } from '../audio/peaks';
 import type { DeckId } from '../control/controls';
 import type { ControlRegistry } from '../control/registry';
@@ -30,6 +31,19 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
   const title = h('span', { class: 'deck-title', text: `Deck ${id}` });
   const trackName = h('span', { class: 'deck-track', text: '曲が読み込まれていません' });
   const tempoText = h('span', { class: 'deck-tempo', text: '+0.0%' });
+  const bpmText = h('span', { class: 'deck-bpm', text: 'BPM —' });
+  const halve = h('button', {
+    class: 'btn-small',
+    text: '½',
+    attrs: { title: 'BPM を半分にする' },
+    on: { click: () => deck.bpm !== null && deck.setBpm(deck.bpm / 2) },
+  });
+  const double = h('button', {
+    class: 'btn-small',
+    text: '×2',
+    attrs: { title: 'BPM を倍にする' },
+    on: { click: () => deck.bpm !== null && deck.setBpm(deck.bpm * 2) },
+  });
   const status = h('span', { class: 'deck-status' });
 
   const zoom = h('canvas', { class: 'wave-zoom' });
@@ -75,7 +89,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     on: {
       click: () => {
         void engine.resume();
-        deck.load(createDemoBuffer(engine.ctx, DEMO_TRACKS[id]), DEMO_TRACKS[id].name);
+        engine.loadBuffer(id, createDemoBuffer(engine.ctx, DEMO_TRACKS[id]), DEMO_TRACKS[id].name);
       },
     },
   });
@@ -89,7 +103,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
   const el = h(
     'section',
     { class: `panel deck deck-${id}` },
-    h('header', {}, h('div', { class: 'deck-heading' }, title, trackName), h('div', {}, tempoText)),
+    h('header', {}, h('div', { class: 'deck-heading' }, title, trackName), h('div', { class: 'deck-numbers' }, bpmText, halve, double, tempoText)),
     h('div', { class: 'deck-main' },
       h('div', { class: 'deck-waves' }, zoom, overview, h('div', { class: 'time-row' }, elapsed, remaining)),
       tempo.el,
@@ -128,6 +142,11 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     el.classList.toggle('focused', engine.focused === id);
     play.textContent = snapshot.playing ? '❚❚ Pause' : '▶ Play';
     tempoText.textContent = `${snapshot.rate >= 1 ? '+' : ''}${((snapshot.rate - 1) * 100).toFixed(1)}%`;
+    bpmText.textContent = snapshot.analyzing
+      ? 'BPM 解析中…'
+      : snapshot.bpm === null
+        ? 'BPM —'
+        : `BPM ${(snapshot.bpm * snapshot.rate).toFixed(1)}`;
     elapsed.textContent = formatTime(snapshot.position);
     remaining.textContent = `-${formatTime(snapshot.duration - snapshot.position)}`;
 
@@ -142,6 +161,15 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
           position: snapshot.position,
           windowSeconds: ZOOM_SECONDS,
           loop: snapshot.loop,
+          beatTimes:
+            snapshot.bpm === null
+              ? undefined
+              : beatTimesIn(
+                  snapshot.firstBeat,
+                  snapshot.bpm,
+                  snapshot.position - ZOOM_SECONDS / 2,
+                  snapshot.position + ZOOM_SECONDS / 2,
+                ),
         },
         colors,
       );

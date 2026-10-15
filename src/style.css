@@ -416,3 +416,22 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+.deck-numbers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deck-bpm {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 96px;
+  text-align: right;
+}
+
+.btn-small {
+  padding: 1px 6px;
+  font-size: 12px;
+}

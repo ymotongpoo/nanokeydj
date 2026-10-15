@@ -1,5 +1,6 @@
 import type { DeckId } from '../control/controls';
 import { Emitter } from '../util/emitter';
+import { phaseCorrection } from './beatgrid';
 import { PlaybackClock, type LoopRegion } from './clock';
 
 /** nudge（一時的なテンポ微調整）の最大幅。±5 %。 */
@@ -15,6 +16,9 @@ export interface DeckSnapshot {
   rate: number;
   tempoRate: number;
   loop: LoopRegion | null;
+  bpm: number | null;
+  firstBeat: number;
+  analyzing: boolean;
 }
 
 /** 1 台のデッキ。バッファを再生し、位置とテンポとループを管理する。 */
@@ -29,6 +33,9 @@ export class Deck {
   private _name = '';
   private _tempoRate = 1;
   private nudge = 0;
+  private _bpm: number | null = null;
+  private _firstBeat = 0;
+  private _analyzing = false;
 
   constructor(
     readonly id: DeckId,
@@ -65,6 +72,25 @@ export class Deck {
     return this._tempoRate;
   }
 
+  /** 曲そのもののテンポ。再生レートは含まない。 */
+  get bpm(): number | null {
+    return this._bpm;
+  }
+
+  /** 最初の拍の位置（秒）。 */
+  get firstBeat(): number {
+    return this._firstBeat;
+  }
+
+  /** 再生レートを掛けた、いま聞こえているテンポ。 */
+  get effectiveBpm(): number | null {
+    return this._bpm === null ? null : this._bpm * this.rate;
+  }
+
+  get analyzing(): boolean {
+    return this._analyzing;
+  }
+
   get loop(): LoopRegion | null {
     return this.clock?.loop ?? null;
   }
@@ -83,6 +109,9 @@ export class Deck {
       rate: this.rate,
       tempoRate: this._tempoRate,
       loop: this.loop,
+      bpm: this._bpm,
+      firstBeat: this._firstBeat,
+      analyzing: this._analyzing,
     };
   }
 
@@ -92,7 +121,50 @@ export class Deck {
     this._name = name;
     this.clock = new PlaybackClock(buffer.duration);
     this.clock.rate = this.rate;
+    this._bpm = null;
+    this._firstBeat = 0;
+    this._analyzing = false;
     this.onChange.emit();
+  }
+
+  setAnalyzing(analyzing: boolean): void {
+    this._analyzing = analyzing;
+    this.onChange.emit();
+  }
+
+  setAnalysis(bpm: number, firstBeat: number): void {
+    this._bpm = bpm;
+    this._firstBeat = firstBeat;
+    this.onChange.emit();
+  }
+
+  /** 解析が半分や倍のテンポを選んだときの手動の修正。グリッドの頭は変えない。 */
+  setBpm(bpm: number): void {
+    if (this._bpm === null) return;
+    this._bpm = Math.min(300, Math.max(30, bpm));
+    this.onChange.emit();
+  }
+
+  /**
+   * 相手のデッキにテンポと拍の位相を合わせる。
+   * 両方が再生中のときだけ、位相のずれを近いほうへ位置を動かして直す。
+   */
+  sync(other: Deck): void {
+    const mine = this._bpm;
+    const theirs = other.effectiveBpm;
+    if (!this.clock || mine === null || theirs === null || other.bpm === null) return;
+    this.setTempoRate(Math.min(1.5, Math.max(0.5, theirs / mine)));
+    if (this.playing && other.playing) {
+      const shift = phaseCorrection(
+        this.position,
+        this._firstBeat,
+        mine,
+        other.position,
+        other.firstBeat,
+        other.bpm,
+      );
+      this.seek(this.position + shift);
+    }
   }
 
   play(): void {
