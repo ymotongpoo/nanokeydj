@@ -6,6 +6,8 @@ import { mixToMono } from './peaks';
 import { StretchPlayer } from './stretch-player';
 import { TrackStore, trackKey } from './track-store';
 
+const QUANTIZE_STORAGE_KEY = 'nanokeydj.quantize';
+
 export interface DeckBuffers {
   A: AudioBuffer | null;
   B: AudioBuffer | null;
@@ -23,6 +25,7 @@ export class Engine {
   focused: DeckId = 'A';
   /** キーロック（AudioWorklet）が使えるようになったか。使えない環境では false で解決する。 */
   readonly keylockReady: Promise<boolean>;
+  private _quantize = false;
 
   private store = new TrackStore();
   private trackKeys: Record<DeckId, string | null> = { A: null, B: null };
@@ -34,8 +37,21 @@ export class Engine {
     this.mixer = new Mixer(ctx);
     this.decks = { A: new Deck('A', ctx), B: new Deck('B', ctx) };
     for (const id of DECK_IDS) this.decks[id].output.connect(this.mixer.channels[id].input);
+    this._quantize = localStorage.getItem(QUANTIZE_STORAGE_KEY) === '1';
+    for (const id of DECK_IDS) this.decks[id].quantize = this._quantize;
     for (const id of DECK_IDS) this.decks[id].onChange.on(() => this.scheduleSave(id));
     this.keylockReady = this.initKeylock();
+  }
+
+  /** キューとホットキューとループの位置を、最寄りの拍に揃える。 */
+  get quantize(): boolean {
+    return this._quantize;
+  }
+
+  set quantize(enabled: boolean) {
+    this._quantize = enabled;
+    localStorage.setItem(QUANTIZE_STORAGE_KEY, enabled ? '1' : '0');
+    for (const id of DECK_IDS) this.decks[id].quantize = enabled;
   }
 
   /** グリッドやキューの手直しを、少し間を置いて曲ごとに保存する。 */

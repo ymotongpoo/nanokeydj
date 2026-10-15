@@ -120,6 +120,15 @@ export function createMixerView(
     },
   });
 
+  const quantize = h('input', {
+    attrs: { type: 'checkbox', ...(engine.quantize ? { checked: '' } : {}) },
+    on: {
+      change: () => {
+        engine.quantize = quantize.checked;
+      },
+    },
+  });
+
   const ledBox = h('input', {
     attrs: { type: 'checkbox', ...(led.enabled ? { checked: '' } : {}) },
     on: {
@@ -176,6 +185,12 @@ export function createMixerView(
       h('label', {}, 'カーブ ', curve),
       h('label', {}, 'テンポ ', range),
       h('label', {}, invert, ' 上が遅い'),
+      h(
+        'label',
+        { attrs: { title: 'Cue、ホットキュー、ループイン・アウトの位置を最寄りの拍に揃える' } },
+        quantize,
+        ' クオンタイズ',
+      ),
       h('label', { attrs: { title: '実機の値が画面の値に追いつくまで、反映を待つ' } }, pickup, ' ピックアップ'),
       h(
         'label',

@@ -513,6 +513,76 @@ describe('ビートグリッドの編集', () => {
   });
 });
 
+describe('クオンタイズ', () => {
+  it('切れていれば位置をそのまま使う', () => {
+    const { deck } = setup(); // 120 BPM、最初の拍 0.25
+    deck.seek(10.3);
+    deck.hotcue(0);
+    expect(deck.hotcues[0]).toBeCloseTo(10.3);
+  });
+
+  it('入っていればホットキューを最寄りの拍に揃える', () => {
+    const { deck } = setup();
+    deck.quantize = true;
+    deck.seek(10.3);
+    deck.hotcue(0);
+    expect(deck.hotcues[0]).toBeCloseTo(10.25);
+    deck.seek(10.49);
+    deck.hotcue(1);
+    expect(deck.hotcues[1]).toBeCloseTo(10.25); // 拍 20.48 は手前の拍へ
+    deck.seek(10.52);
+    deck.hotcue(2);
+    expect(deck.hotcues[2]).toBeCloseTo(10.75); // 拍 20.52 は次の拍へ
+  });
+
+  it('キューポイントも揃える', () => {
+    const { deck } = setup();
+    deck.quantize = true;
+    deck.seek(7.4);
+    deck.cuePress();
+    expect(deck.cuePoint).toBeCloseTo(7.25);
+  });
+
+  it('ループインとアウトも揃える', () => {
+    const { deck } = setup();
+    deck.quantize = true;
+    deck.seek(10.3);
+    deck.loopIn();
+    deck.seek(12.6);
+    deck.loopOut();
+    expect(deck.loop?.start).toBeCloseTo(10.25);
+    expect(deck.loop?.end).toBeCloseTo(12.75);
+  });
+
+  it('揃えた結果が短すぎるループは受け付けない', () => {
+    const { deck } = setup();
+    deck.quantize = true;
+    deck.seek(10.3);
+    deck.loopIn();
+    deck.seek(10.4);
+    deck.loopOut();
+    expect(deck.loop).toBeNull();
+  });
+
+  it('BPM が分からなければ、入っていても揃えない', () => {
+    const ctx = new FakeContext();
+    const deck = new Deck('B', ctx as unknown as AudioContext);
+    deck.load(buffer(60), 'no-bpm');
+    deck.quantize = true;
+    deck.seek(10.3);
+    deck.hotcue(0);
+    expect(deck.hotcues[0]).toBeCloseTo(10.3);
+  });
+
+  it('曲の端を越えない', () => {
+    const { deck } = setup();
+    deck.quantize = true;
+    deck.seek(0.01);
+    deck.hotcue(0);
+    expect(deck.hotcues[0]).toBeGreaterThanOrEqual(0);
+  });
+});
+
 describe('テンポと Sync', () => {
   it('nudge は一時的に再生レートを上下させ、0 で元に戻る', () => {
     const { deck } = setup();

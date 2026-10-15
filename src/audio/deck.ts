@@ -1,6 +1,6 @@
 import { HOTCUE_COUNT, type DeckId } from '../control/controls';
 import { Emitter } from '../util/emitter';
-import { beatLoopRegion, normalizeFirstBeat, phaseCorrection } from './beatgrid';
+import { beatLoopRegion, nearestBeat, normalizeFirstBeat, phaseCorrection } from './beatgrid';
 import { PlaybackClock, type LoopRegion } from './clock';
 import type { Stretcher } from './stretch-player';
 import type { TrackState } from './track-store';
@@ -37,6 +37,8 @@ export interface DeckSnapshot {
 
 /** 1 台のデッキ。バッファを再生し、位置とテンポとループを管理する。 */
 export class Deck {
+  /** true のとき、キューとホットキューとループの位置を最寄りの拍に揃える。BPM が分からなければ揃えない。 */
+  quantize = false;
   /** 曲の読み込み、再生と停止、ループの変更など、画面を描き直すべき離散的な変化。 */
   readonly onChange = new Emitter<void>();
   readonly output: GainNode;
@@ -335,7 +337,7 @@ export class Deck {
       this.previewing = true;
       this.play();
     } else {
-      this._cuePoint = this.position;
+      this._cuePoint = this.snap(this.position);
       this.onChange.emit();
     }
   }
@@ -352,7 +354,7 @@ export class Deck {
     if (!this.clock || index < 0 || index >= HOTCUE_COUNT) return;
     const cue = this._hotcues[index];
     if (cue === null || cue === undefined) {
-      this._hotcues[index] = this.position;
+      this._hotcues[index] = this.snap(this.position);
       this.onChange.emit();
       return;
     }
@@ -384,7 +386,7 @@ export class Deck {
    */
   loopIn(): void {
     if (!this.clock) return;
-    const position = this.position;
+    const position = this.snap(this.position);
     const loop = this.loop;
     if (loop) {
       if (loop.end - position >= MIN_LOOP_SECONDS) this.setLoop({ start: position, end: loop.end });
@@ -397,7 +399,7 @@ export class Deck {
   /** ループアウト。ループ中ならループの終点を今の位置へ動かす。 */
   loopOut(): void {
     if (!this.clock) return;
-    const position = this.position;
+    const position = this.snap(this.position);
     const loop = this.loop;
     if (loop) {
       if (position - loop.start >= MIN_LOOP_SECONDS) this.setLoop({ start: loop.start, end: position });
@@ -476,6 +478,12 @@ export class Deck {
       this.startSource();
     }
     this.onChange.emit();
+  }
+
+  /** クオンタイズが入っていれば、位置を最寄りの拍に揃える。 */
+  private snap(position: number): number {
+    if (!this.quantize || this._bpm === null) return position;
+    return Math.min(this.duration, Math.max(0, nearestBeat(position, this._firstBeat, this._bpm)));
   }
 
   private applyRate(): void {
