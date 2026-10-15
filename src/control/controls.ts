@@ -49,7 +49,10 @@ export function allControlDefs(): ControlDef[] {
   }
   for (const deck of DECK_IDS) {
     const group = `Mixer ${deck}`;
-    defs.push({ id: `mixer.${deck}.volume`, label: `Ch ${deck} 音量`, kind: 'continuous', group });
+    defs.push(
+      { id: `mixer.${deck}.volume`, label: `Ch ${deck} 音量`, kind: 'continuous', group },
+      { id: `mixer.${deck}.cue`, label: `Ch ${deck} ヘッドホン Cue`, kind: 'trigger', group },
+    );
     for (const band of EQ_BANDS) {
       defs.push({
         id: `mixer.${deck}.eq.${band}`,
@@ -68,6 +71,8 @@ export function allControlDefs(): ControlDef[] {
   defs.push(
     { id: 'mixer.crossfader', label: 'クロスフェーダー', kind: 'continuous', group: 'Mixer' },
     { id: 'mixer.master', label: 'マスター音量', kind: 'continuous', group: 'Mixer' },
+    { id: 'mixer.headphone.volume', label: 'ヘッドホン音量', kind: 'continuous', group: 'Mixer' },
+    { id: 'mixer.headphone.mix', label: 'ヘッドホン Cue/Master', kind: 'continuous', group: 'Mixer' },
   );
 
   const focusGroup = 'フォーカスデッキ';

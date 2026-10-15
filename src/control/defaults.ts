@@ -24,6 +24,8 @@ function nanoKontrol2Defaults(): Binding[] {
     cc('mixer.master', 3),
     cc('deck.A.tempo', 4),
     cc('deck.B.tempo', 5),
+    cc('mixer.headphone.volume', 6),
+    cc('mixer.headphone.mix', 7),
     cc('focus.A', 58),
     cc('focus.B', 59),
     cc('focused.play', 41),
@@ -44,6 +46,7 @@ function nanoKontrol2Defaults(): Binding[] {
       cc(`mixer.${deck}.filter`, 19 + offset),
       cc(`deck.${deck}.play`, 32 + offset),
       cc(`deck.${deck}.cue`, 48 + offset),
+      cc(`mixer.${deck}.cue`, 49 + offset),
       cc(`deck.${deck}.sync`, 64 + offset),
       cc(`deck.${deck}.keylock`, 65 + offset),
     );

@@ -468,3 +468,23 @@ select {
 .btn-hotcue.set.pressed {
   color: #06121a;
 }
+
+.channel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-cue-send.active,
+.btn-cue-send.pressed {
+  background: #f5d04c;
+  border-color: #f5d04c;
+  color: #1a1500;
+}
+
+.headphones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   crossfaderGains,
+  cueMixGains,
   dbToGain,
   eqGainDb,
   filterCutoffs,
@@ -111,5 +112,15 @@ describe('dbToGain', () => {
   it('-6 dB は約半分', () => {
     expect(dbToGain(-6)).toBeCloseTo(0.501, 2);
     expect(dbToGain(0)).toBe(1);
+  });
+});
+
+describe('cueMixGains', () => {
+  it('両端で片方だけが鳴り、中央は等パワー', () => {
+    expect(cueMixGains(0)).toEqual({ cue: 1, master: 0 });
+    expect(cueMixGains(1).cue).toBeCloseTo(0);
+    expect(cueMixGains(1).master).toBeCloseTo(1);
+    const { cue, master } = cueMixGains(0.5);
+    expect(cue * cue + master * master).toBeCloseTo(1);
   });
 });

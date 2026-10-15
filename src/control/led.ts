@@ -19,6 +19,8 @@ type LedDeck = Pick<
 export function computeLedStates(
   decks: Record<DeckId, LedDeck>,
   focused: DeckId,
+  /** ヘッドホン Cue が入っているチャンネル。 */
+  headphoneCue: Record<DeckId, boolean>,
 ): Map<string, boolean> {
   const states = new Map<string, boolean>();
   const tempo = (deck: LedDeck) => (deck.bpm === null ? null : deck.bpm * deck.rate);
@@ -37,6 +39,7 @@ export function computeLedStates(
     states.set(`deck.${id}.sync`, synced);
     states.set(`deck.${id}.keylock`, deck.keylock);
     states.set(`focus.${id}`, focused === id);
+    states.set(`mixer.${id}.cue`, headphoneCue[id]);
   }
   states.set('focused.play', decks[focused].playing);
   states.set('focused.loop.exit', decks[focused].loop !== null);

@@ -19,6 +19,8 @@ const deck = (overrides: Partial<LedDeck> = {}): LedDeck => ({
   ...overrides,
 });
 
+const NO_CUE = { A: false, B: false };
+
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage {
   const data = { ...initial };
   return {
@@ -30,35 +32,35 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage {
 
 describe('computeLedStates', () => {
   it('再生中のデッキの Play が点く', () => {
-    const states = computeLedStates({ A: deck({ playing: true }), B: deck() }, 'A');
+    const states = computeLedStates({ A: deck({ playing: true }), B: deck() }, 'A', NO_CUE);
     expect(states.get('deck.A.play')).toBe(true);
     expect(states.get('deck.B.play')).toBe(false);
   });
 
   it('止まってキューポイント上にいるときだけ Cue が点く', () => {
-    const parked = computeLedStates({ A: deck({ position: 0.01 }), B: deck() }, 'A');
+    const parked = computeLedStates({ A: deck({ position: 0.01 }), B: deck() }, 'A', NO_CUE);
     expect(parked.get('deck.A.cue')).toBe(true);
-    const away = computeLedStates({ A: deck({ position: 5 }), B: deck() }, 'A');
+    const away = computeLedStates({ A: deck({ position: 5 }), B: deck() }, 'A', NO_CUE);
     expect(away.get('deck.A.cue')).toBe(false);
-    const playing = computeLedStates({ A: deck({ position: 0, playing: true }), B: deck() }, 'A');
+    const playing = computeLedStates({ A: deck({ position: 0, playing: true }), B: deck() }, 'A', NO_CUE);
     expect(playing.get('deck.A.cue')).toBe(false);
   });
 
   it('曲がなければ Cue は点かない', () => {
-    const states = computeLedStates({ A: deck({ loaded: false, position: 0 }), B: deck() }, 'A');
+    const states = computeLedStates({ A: deck({ loaded: false, position: 0 }), B: deck() }, 'A', NO_CUE);
     expect(states.get('deck.A.cue')).toBe(false);
   });
 
   it('実効テンポが揃っているあいだ Sync が両方で点く', () => {
-    const synced = computeLedStates({ A: deck({ bpm: 124 }), B: deck({ bpm: 128, rate: 124 / 128 }) }, 'A');
+    const synced = computeLedStates({ A: deck({ bpm: 124 }), B: deck({ bpm: 128, rate: 124 / 128 }) }, 'A', NO_CUE);
     expect(synced.get('deck.A.sync')).toBe(true);
     expect(synced.get('deck.B.sync')).toBe(true);
-    const apart = computeLedStates({ A: deck({ bpm: 124 }), B: deck({ bpm: 128 }) }, 'A');
+    const apart = computeLedStates({ A: deck({ bpm: 124 }), B: deck({ bpm: 128 }) }, 'A', NO_CUE);
     expect(apart.get('deck.A.sync')).toBe(false);
   });
 
   it('BPM が分からなければ Sync は点かない', () => {
-    const states = computeLedStates({ A: deck({ bpm: null }), B: deck() }, 'A');
+    const states = computeLedStates({ A: deck({ bpm: null }), B: deck() }, 'A', NO_CUE);
     expect(states.get('deck.A.sync')).toBe(false);
   });
 
@@ -66,12 +68,21 @@ describe('computeLedStates', () => {
     const states = computeLedStates(
       { A: deck({ keylock: true }), B: deck({ loop: { start: 1, end: 2 } }) },
       'B',
+      NO_CUE,
     );
     expect(states.get('deck.A.keylock')).toBe(true);
     expect(states.get('focus.A')).toBe(false);
     expect(states.get('focus.B')).toBe(true);
     expect(states.get('focused.loop.exit')).toBe(true);
     expect(states.get('focused.play')).toBe(false);
+  });
+});
+
+describe('computeLedStates のヘッドホン Cue', () => {
+  it('Cue が入っているチャンネルだけ点く', () => {
+    const states = computeLedStates({ A: deck(), B: deck() }, 'A', { A: false, B: true });
+    expect(states.get('mixer.A.cue')).toBe(false);
+    expect(states.get('mixer.B.cue')).toBe(true);
   });
 });
 

@@ -64,6 +64,12 @@ export function crossfaderGains(position: number, curve: CrossfaderCurve): { a: 
   }
 }
 
+/** ヘッドホンの Cue/Master つまみ。0 で Cue だけ、1 でマスターだけ。等パワーで混ぜる。 */
+export function cueMixGains(mix: number): { cue: number; master: number } {
+  const m = clamp01(mix);
+  return { cue: Math.cos((m * Math.PI) / 2), master: Math.sin((m * Math.PI) / 2) };
+}
+
 const TEMPO_DEAD_ZONE = 0.02;
 
 /**

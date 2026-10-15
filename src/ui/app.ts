@@ -18,7 +18,11 @@ export function mountApp(
 ): void {
   const decks = DECK_IDS.map((id) => createDeckView(engine, controller.registry, id));
   const led = new LedFeedback(midi, controller.bindings, () =>
-    computeLedStates({ A: engine.decks.A.snapshot(), B: engine.decks.B.snapshot() }, engine.focused),
+    computeLedStates(
+      { A: engine.decks.A.snapshot(), B: engine.decks.B.snapshot() },
+      engine.focused,
+      { A: engine.mixer.channels.A.cue, B: engine.mixer.channels.B.cue },
+    ),
   );
   // 機器を挿し直したら、LED の状態を送り直す。
   midi.onPortsChanged.on(() => led.resync());

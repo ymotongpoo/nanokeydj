@@ -1,5 +1,12 @@
 import type { DeckId, EqBand } from '../control/controls';
-import { crossfaderGains, eqGainDb, filterCutoffs, volumeGain, type CrossfaderCurve } from './curves';
+import {
+  crossfaderGains,
+  cueMixGains,
+  eqGainDb,
+  filterCutoffs,
+  volumeGain,
+  type CrossfaderCurve,
+} from './curves';
 
 /** 値の変化で耳障りなクリックが出ないよう、パラメーターは短い時定数でなめらかに追従させる。 */
 const SMOOTHING = 0.015;
@@ -10,16 +17,27 @@ function setSmooth(ctx: BaseAudioContext, param: AudioParam, value: number): voi
 
 const EQ_FREQ: Record<EqBand, number> = { low: 200, mid: 1000, high: 3500 };
 
+/**
+ * ヘッドホンの出し方。
+ * off: マスターだけをステレオで出す。
+ * split: 左にマスター、右にヘッドホンのモノラルを出す（スプリッターケーブルで分ける）。
+ * quad: 4ch で、1-2 にマスター、3-4 にヘッドホンを出す（4ch 以上のオーディオインターフェース用）。
+ */
+export type CueRouting = 'off' | 'split' | 'quad';
+
 /** 1 チャンネル分のストリップ: トリム → EQ → フィルター → チャンネルフェーダー → クロスフェーダー。 */
 export class ChannelStrip {
   readonly input: GainNode;
   readonly output: GainNode;
+  /** ヘッドホンへの送り。EQ とフィルターの後、フェーダーの前から取る（PFL）。 */
+  readonly cueSend: GainNode;
   private eq: Record<EqBand, BiquadFilterNode>;
   private lowpass: BiquadFilterNode;
   private highpass: BiquadFilterNode;
   private fader: GainNode;
   private analyser: AnalyserNode;
   private samples: Float32Array<ArrayBuffer>;
+  private _cue = false;
 
   constructor(private ctx: BaseAudioContext) {
     this.input = ctx.createGain();
@@ -47,6 +65,8 @@ export class ChannelStrip {
 
     this.fader = ctx.createGain();
     this.output = ctx.createGain();
+    this.cueSend = ctx.createGain();
+    this.cueSend.gain.value = 0;
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 512;
     this.samples = new Float32Array(this.analyser.fftSize);
@@ -59,7 +79,17 @@ export class ChannelStrip {
       .connect(this.highpass)
       .connect(this.fader)
       .connect(this.output);
+    this.highpass.connect(this.cueSend);
     this.fader.connect(this.analyser);
+  }
+
+  get cue(): boolean {
+    return this._cue;
+  }
+
+  setCue(enabled: boolean): void {
+    this._cue = enabled;
+    setSmooth(this.ctx, this.cueSend.gain, enabled ? 1 : 0);
   }
 
   setVolume(value: number): void {
@@ -89,17 +119,34 @@ export class ChannelStrip {
   }
 }
 
-/** 2 チャンネルのミキサー。クロスフェーダーとマスターを持つ。 */
+/** 2 チャンネルのミキサー。クロスフェーダー、マスター、ヘッドホン Cue を持つ。 */
 export class Mixer {
   readonly channels: Record<DeckId, ChannelStrip>;
   readonly master: GainNode;
+  /** マスターの最終出力。出し方（routing）に応じてここから先をつなぎ替える。 */
+  private masterOut: GainNode;
   private limiter: DynamicsCompressorNode;
   private masterAnalyser: AnalyserNode;
   private masterSamples: Float32Array<ArrayBuffer>;
+
+  private headphoneCue: GainNode;
+  private headphoneMaster: GainNode;
+  private headphoneVolume: GainNode;
+  private headphoneOut: GainNode;
+  private routingNodes: AudioNode[] = [];
+  /**
+   * 出力デバイスが扱えるチャンネル数。destination のチャンネル数を変えると
+   * maxChannelCount まで変わる実装があるので、触る前に控えておく。
+   */
+  private readonly maxChannels: number;
+  private destinationIsQuad = false;
+
   private crossfader = 0.5;
   private curve: CrossfaderCurve = 'smooth';
+  private _routing: CueRouting = 'off';
 
   constructor(private ctx: BaseAudioContext) {
+    this.maxChannels = ctx.destination.maxChannelCount;
     this.channels = { A: new ChannelStrip(ctx), B: new ChannelStrip(ctx) };
     this.master = ctx.createGain();
     this.limiter = ctx.createDynamicsCompressor();
@@ -108,15 +155,46 @@ export class Mixer {
     this.limiter.ratio.value = 20;
     this.limiter.attack.value = 0.003;
     this.limiter.release.value = 0.1;
+    this.masterOut = ctx.createGain();
     this.masterAnalyser = ctx.createAnalyser();
     this.masterAnalyser.fftSize = 512;
     this.masterSamples = new Float32Array(this.masterAnalyser.fftSize);
 
     this.channels.A.output.connect(this.master);
     this.channels.B.output.connect(this.master);
-    this.master.connect(this.limiter).connect(ctx.destination);
+    this.master.connect(this.limiter).connect(this.masterOut);
     this.limiter.connect(this.masterAnalyser);
+
+    // ヘッドホン: Cue した信号とマスターを混ぜ、音量をかける。
+    this.headphoneCue = ctx.createGain();
+    this.headphoneMaster = ctx.createGain();
+    this.headphoneVolume = ctx.createGain();
+    this.headphoneOut = ctx.createGain();
+    this.channels.A.cueSend.connect(this.headphoneCue);
+    this.channels.B.cueSend.connect(this.headphoneCue);
+    this.headphoneCue.connect(this.headphoneVolume);
+    this.limiter.connect(this.headphoneMaster).connect(this.headphoneVolume);
+    this.headphoneVolume.connect(this.headphoneOut);
+
     this.applyCrossfader();
+    this.setHeadphoneMix(0.5);
+    this.setHeadphoneVolume(0.7);
+    this.applyRouting();
+  }
+
+  get routing(): CueRouting {
+    return this._routing;
+  }
+
+  /** 4ch 出力に使えるか。出力デバイスが 4ch 以上に対応しているときだけ true。 */
+  get quadAvailable(): boolean {
+    return this.maxChannels >= 4;
+  }
+
+  setRouting(routing: CueRouting): void {
+    if (routing === 'quad' && !this.quadAvailable) routing = 'off';
+    this._routing = routing;
+    this.applyRouting();
   }
 
   setMaster(value: number): void {
@@ -133,6 +211,17 @@ export class Mixer {
     this.applyCrossfader();
   }
 
+  setHeadphoneVolume(value: number): void {
+    setSmooth(this.ctx, this.headphoneVolume.gain, volumeGain(value));
+  }
+
+  /** 0 で Cue だけ、1 でマスターだけ。 */
+  setHeadphoneMix(value: number): void {
+    const { cue, master } = cueMixGains(value);
+    setSmooth(this.ctx, this.headphoneCue.gain, cue);
+    setSmooth(this.ctx, this.headphoneMaster.gain, master);
+  }
+
   masterLevel(): number {
     this.masterAnalyser.getFloatTimeDomainData(this.masterSamples);
     let peak = 0;
@@ -144,5 +233,68 @@ export class Mixer {
     const { a, b } = crossfaderGains(this.crossfader, this.curve);
     this.channels.A.setCrossGain(a);
     this.channels.B.setCrossGain(b);
+  }
+
+  /** 出し方に応じて、マスターとヘッドホンの出力先をつなぎ替える。 */
+  private applyRouting(): void {
+    this.masterOut.disconnect();
+    this.headphoneOut.disconnect();
+    for (const node of this.routingNodes) node.disconnect();
+    this.routingNodes = [];
+
+    const destination = this.ctx.destination;
+    this.setDestinationQuad(this._routing === 'quad');
+
+    switch (this._routing) {
+      case 'off':
+        this.masterOut.connect(destination);
+        break;
+      case 'split': {
+        // 左右をモノラルに畳み、マスターを左、ヘッドホンを右へ出す。
+        const merger = this.ctx.createChannelMerger(2);
+        const masterMono = this.monoNode();
+        const headphoneMono = this.monoNode();
+        this.masterOut.connect(masterMono).connect(merger, 0, 0);
+        this.headphoneOut.connect(headphoneMono).connect(merger, 0, 1);
+        merger.connect(destination);
+        this.routingNodes.push(merger, masterMono, headphoneMono);
+        break;
+      }
+      case 'quad': {
+        const merger = this.ctx.createChannelMerger(4);
+        const masterSplit = this.ctx.createChannelSplitter(2);
+        const headphoneSplit = this.ctx.createChannelSplitter(2);
+        this.masterOut.connect(masterSplit);
+        this.headphoneOut.connect(headphoneSplit);
+        masterSplit.connect(merger, 0, 0);
+        masterSplit.connect(merger, 1, 1);
+        headphoneSplit.connect(merger, 0, 2);
+        headphoneSplit.connect(merger, 1, 3);
+        merger.connect(destination);
+        this.routingNodes.push(merger, masterSplit, headphoneSplit);
+        break;
+      }
+    }
+  }
+
+  private monoNode(): GainNode {
+    const node = this.ctx.createGain();
+    node.channelCount = 1;
+    node.channelCountMode = 'explicit';
+    node.channelInterpretation = 'speakers';
+    return node;
+  }
+
+  /** 4ch へ切り替えるとき、または 4ch から戻るときだけ、出力先のチャンネル数を変える。 */
+  private setDestinationQuad(quad: boolean): void {
+    if (quad === this.destinationIsQuad) return;
+    const destination = this.ctx.destination;
+    try {
+      destination.channelCount = quad ? 4 : 2;
+      destination.channelInterpretation = quad ? 'discrete' : 'speakers';
+      this.destinationIsQuad = quad;
+    } catch {
+      // チャンネル数を変えられない出力先では、そのまま使う。
+    }
   }
 }

@@ -1,12 +1,14 @@
 import type { Engine } from '../audio/engine';
 import type { CrossfaderCurve } from '../audio/curves';
+import type { CueRouting } from '../audio/mixer';
 import { DECK_IDS, type DeckId } from '../control/controls';
 import type { Controller } from '../control/controller';
 import type { LedFeedback } from '../control/led';
-import { createSlider } from './controls';
+import { bindButton, createSlider } from './controls';
 import { h } from './dom';
 
 const TEMPO_RANGES = [6, 8, 10, 16, 25, 50];
+const ROUTING_STORAGE_KEY = 'nanokeydj.cue-routing';
 
 function createMeter(): { el: HTMLElement; set: (level: number) => void } {
   const fill = h('div', { class: 'meter-fill' });
@@ -31,6 +33,7 @@ export function createMixerView(
   const registry = controller.registry;
   const updaters: (() => void)[] = [];
   const meters = new Map<DeckId | 'master', ReturnType<typeof createMeter>>();
+  const cueButtons = new Map<DeckId, HTMLElement>();
 
   const channel = (id: DeckId) => {
     const slider = (controlId: string, label: string, orient: 'vertical' | 'horizontal') => {
@@ -40,10 +43,17 @@ export function createMixerView(
     };
     const meter = createMeter();
     meters.set(id, meter);
+    const cue = h('button', {
+      class: 'btn-small btn-cue-send',
+      text: 'CUE',
+      attrs: { title: 'ヘッドホンでこのチャンネルを聴く（フェーダーの前の信号）' },
+    });
+    updaters.push(bindButton(cue, registry, `mixer.${id}.cue`));
+    cueButtons.set(id, cue);
     return h(
       'div',
       { class: `channel channel-${id}` },
-      h('h3', { text: `Ch ${id}` }),
+      h('div', { class: 'channel-head' }, h('h3', { text: `Ch ${id}` }), cue),
       slider(`mixer.${id}.eq.high`, 'Hi', 'horizontal'),
       slider(`mixer.${id}.eq.mid`, 'Mid', 'horizontal'),
       slider(`mixer.${id}.eq.low`, 'Low', 'horizontal'),
@@ -119,15 +129,50 @@ export function createMixerView(
     },
   });
 
+  const headphoneVolume = createSlider(registry, 'mixer.headphone.volume', {
+    label: 'HP 音量',
+    orient: 'horizontal',
+  });
+  const headphoneMix = createSlider(registry, 'mixer.headphone.mix', {
+    label: 'Cue ◀ ▶ Master',
+    orient: 'horizontal',
+  });
+  updaters.push(headphoneVolume.update, headphoneMix.update);
+
+  const routing = h(
+    'select',
+    {
+      attrs: { 'aria-label': 'ヘッドホンの出し方' },
+      on: {
+        change: () => {
+          engine.mixer.setRouting(routing.value as CueRouting);
+          localStorage.setItem(ROUTING_STORAGE_KEY, engine.mixer.routing);
+          routing.value = engine.mixer.routing;
+        },
+      },
+    },
+    h('option', { text: 'オフ（マスターのみ）', attrs: { value: 'off' } }),
+    h('option', { text: '分割（左=マスター、右=ヘッドホン）', attrs: { value: 'split' } }),
+    h('option', {
+      text: '4ch（1-2=マスター、3-4=ヘッドホン）',
+      attrs: { value: 'quad', ...(engine.mixer.quadAvailable ? {} : { disabled: '' }) },
+    }),
+  );
+  const savedRouting = localStorage.getItem(ROUTING_STORAGE_KEY);
+  if (savedRouting === 'split' || savedRouting === 'quad') engine.mixer.setRouting(savedRouting);
+  routing.value = engine.mixer.routing;
+
   const el = h(
     'section',
     { class: 'panel mixer' },
     h('header', {}, h('h2', { text: 'MIXER' })),
     h('div', { class: 'channels' }, channel('A'), h('div', { class: 'master' }, master.el, masterMeter.el), channel('B')),
     crossfader.el,
+    h('div', { class: 'headphones' }, headphoneVolume.el, headphoneMix.el),
     h(
       'div',
       { class: 'mixer-options' },
+      h('label', {}, 'ヘッドホン ', routing),
       h('label', {}, 'カーブ ', curve),
       h('label', {}, 'テンポ ', range),
       h('label', {}, invert, ' 上が遅い'),
@@ -147,6 +192,8 @@ export function createMixerView(
 
   const update = () => {
     for (const updater of updaters) updater();
+    // CUE ボタンの点灯は、押している間ではなくチャンネルの Cue の入り切りを映す。
+    for (const id of DECK_IDS) cueButtons.get(id)?.classList.toggle('active', engine.mixer.channels[id].cue);
     for (const id of DECK_IDS) meters.get(id)?.set(engine.mixer.channels[id].level());
     meters.get('master')?.set(engine.mixer.masterLevel());
   };

@@ -11,6 +11,8 @@ const NUDGE_DEAD_ZONE = 0.05;
 const INITIAL_VALUES: Record<string, number> = {
   'mixer.crossfader': 0.5,
   'mixer.master': 0.8,
+  'mixer.headphone.volume': 0.7,
+  'mixer.headphone.mix': 0.5,
 };
 
 /** レジストリのコントロールを、エンジンの操作に結びつける。 */
@@ -30,6 +32,7 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
       deck.setTempoRate(tempoRate(v, engine.tempoRange, engine.tempoInvert)),
     );
     registry.setHandler(`mixer.${id}.volume`, (v) => strip.setVolume(v));
+    registry.setHandler(`mixer.${id}.cue`, () => strip.setCue(!strip.cue));
     for (const band of EQ_BANDS) {
       registry.setHandler(`mixer.${id}.eq.${band}`, (v) => strip.setEq(band, v));
     }
@@ -54,6 +57,8 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
 
   registry.setHandler('mixer.crossfader', (v) => engine.mixer.setCrossfader(v));
   registry.setHandler('mixer.master', (v) => engine.mixer.setMaster(v));
+  registry.setHandler('mixer.headphone.volume', (v) => engine.mixer.setHeadphoneVolume(v));
+  registry.setHandler('mixer.headphone.mix', (v) => engine.mixer.setHeadphoneMix(v));
   registry.setHandler('focused.play', () => focusedDeck().togglePlay());
   registry.setHandler('focused.cue', (v) => {
     if (v > 0) {
