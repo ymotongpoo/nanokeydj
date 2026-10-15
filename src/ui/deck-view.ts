@@ -32,6 +32,11 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
   const trackName = h('span', { class: 'deck-track', text: '曲が読み込まれていません' });
   const tempoText = h('span', { class: 'deck-tempo', text: '+0.0%' });
   const bpmText = h('span', { class: 'deck-bpm', text: 'BPM —' });
+  const keylock = h('button', {
+    class: 'btn-small',
+    text: 'KEY',
+    attrs: { title: 'キーロック（テンポを変えても音程を変えない）' },
+  });
   const halve = h('button', {
     class: 'btn-small',
     text: '½',
@@ -59,6 +64,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     bindButton(play, registry, `deck.${id}.play`),
     bindButton(cue, registry, `deck.${id}.cue`),
     bindButton(sync, registry, `deck.${id}.sync`),
+    bindButton(keylock, registry, `deck.${id}.keylock`),
   ];
   const tempo = createSlider(registry, `deck.${id}.tempo`, {
     label: 'Tempo',
@@ -144,7 +150,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
   const el = h(
     'section',
     { class: `panel deck deck-${id}` },
-    h('header', {}, h('div', { class: 'deck-heading' }, title, trackName), h('div', { class: 'deck-numbers' }, bpmText, halve, double, tempoText)),
+    h('header', {}, h('div', { class: 'deck-heading' }, title, trackName), h('div', { class: 'deck-numbers' }, bpmText, halve, double, keylock, tempoText)),
     h('div', { class: 'deck-main' },
       h('div', { class: 'deck-waves' }, zoom, overview, h('div', { class: 'time-row' }, elapsed, remaining)),
       tempo.el,
@@ -197,6 +203,8 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
       const time = snapshot.hotcues[i];
       button.classList.toggle('set', time !== null && time !== undefined);
     });
+    keylock.classList.toggle('active', snapshot.keylock);
+    keylock.disabled = !snapshot.keylockAvailable;
     loopIn.classList.toggle('active', snapshot.loopInPoint !== null);
     for (const { beats, button } of loopButtons) {
       const active =

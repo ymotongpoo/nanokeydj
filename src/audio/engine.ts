@@ -3,6 +3,7 @@ import { analyzeBpm } from './bpm-client';
 import { Deck } from './deck';
 import { Mixer } from './mixer';
 import { mixToMono } from './peaks';
+import { StretchPlayer } from './stretch-player';
 
 export interface DeckBuffers {
   A: AudioBuffer | null;
@@ -19,12 +20,26 @@ export class Engine {
   /** true なら DJ 機器の慣習どおり、フェーダーの上側が遅くなる。 */
   tempoInvert = true;
   focused: DeckId = 'A';
+  /** キーロック（AudioWorklet）が使えるようになったか。使えない環境では false で解決する。 */
+  readonly keylockReady: Promise<boolean>;
 
   constructor(ctx: AudioContext = new AudioContext({ latencyHint: 'interactive' })) {
     this.ctx = ctx;
     this.mixer = new Mixer(ctx);
     this.decks = { A: new Deck('A', ctx), B: new Deck('B', ctx) };
     for (const id of DECK_IDS) this.decks[id].output.connect(this.mixer.channels[id].input);
+    this.keylockReady = this.initKeylock();
+  }
+
+  private async initKeylock(): Promise<boolean> {
+    try {
+      await StretchPlayer.register(this.ctx);
+      for (const id of DECK_IDS) this.decks[id].attachStretcher(new StretchPlayer(this.ctx));
+      return true;
+    } catch (error) {
+      console.warn('キーロックを初期化できませんでした', error);
+      return false;
+    }
   }
 
   get running(): boolean {

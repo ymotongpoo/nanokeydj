@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Deck } from './deck';
+import type { Stretcher } from './stretch-player';
 
 /** Deck が触る範囲だけを模した AudioContext。時刻は手で進める。 */
 class FakeSource {
@@ -34,7 +35,35 @@ class FakeContext {
   }
 }
 
-const buffer = (duration: number) => ({ duration }) as unknown as AudioBuffer;
+const buffer = (duration: number) =>
+  ({ duration, numberOfChannels: 2, getChannelData: () => new Float32Array(4) }) as unknown as AudioBuffer;
+
+class FakeStretcher implements Stretcher {
+  output = { connect() {} } as unknown as AudioNode;
+  onEnded: (() => void) | null = null;
+  calls: unknown[][] = [];
+  load(channels: Float32Array[]) {
+    this.calls.push(['load', channels.length]);
+  }
+  unload() {
+    this.calls.push(['unload']);
+  }
+  play(when: number, offset: number, rate: number, loop: unknown) {
+    this.calls.push(['play', when, offset, rate, loop]);
+  }
+  stop() {
+    this.calls.push(['stop']);
+  }
+  setRate(rate: number) {
+    this.calls.push(['rate', rate]);
+  }
+  setLoop(loop: unknown) {
+    this.calls.push(['loop', loop]);
+  }
+  names() {
+    return this.calls.map((c) => c[0]);
+  }
+}
 
 function setup() {
   const ctx = new FakeContext();
@@ -286,6 +315,109 @@ describe('手動ループ', () => {
     deck.loopIn();
     deck.load(buffer(60), 'next');
     expect(deck.loopInPoint).toBeNull();
+  });
+});
+
+describe('キーロック', () => {
+  function withStretcher() {
+    const { ctx, deck } = setup();
+    const stretcher = new FakeStretcher();
+    deck.attachStretcher(stretcher);
+    return { ctx, deck, stretcher };
+  }
+
+  it('ワークレットがなければ入れられない', () => {
+    const { deck } = setup();
+    expect(deck.keylockAvailable).toBe(false);
+    deck.setKeylock(true);
+    expect(deck.keylock).toBe(false);
+  });
+
+  it('入れるとサンプルを渡し、再生は時間伸縮の経路で行う', () => {
+    const { ctx, deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    expect(stretcher.calls[0]).toEqual(['load', 2]);
+    deck.seek(10);
+    deck.setTempoRate(1.08);
+    const sources = ctx.sources.length;
+    ctx.currentTime = 3;
+    deck.play();
+    expect(ctx.sources).toHaveLength(sources);
+    expect(stretcher.calls.at(-1)).toEqual(['play', 3, 10, 1.08, null]);
+    ctx.currentTime = 4;
+    expect(deck.position).toBeCloseTo(10 + 1.08);
+  });
+
+  it('再生中に入れると、同じ位置から時間伸縮の経路へ切り替える', () => {
+    const { ctx, deck, stretcher } = withStretcher();
+    deck.seek(10);
+    deck.play();
+    const native = ctx.sources.at(-1)!;
+    ctx.currentTime = 2;
+    deck.setKeylock(true);
+    expect(native.stopped).toBe(true);
+    expect(stretcher.calls.at(-1)).toEqual(['play', 2, 12, 1, null]);
+  });
+
+  it('切ると通常の経路へ戻し、サンプルを手放す', () => {
+    const { ctx, deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    deck.seek(10);
+    deck.play();
+    ctx.currentTime = 1;
+    deck.setKeylock(false);
+    expect(stretcher.names()).toContain('stop');
+    expect(stretcher.names().at(-1)).toBe('unload');
+    expect(ctx.sources.at(-1)?.startedAt).toBeCloseTo(11);
+  });
+
+  it('レートとループの変更をワークレットへ伝える', () => {
+    const { deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    deck.seek(10.3);
+    deck.play();
+    deck.setTempoRate(0.95);
+    expect(stretcher.calls.at(-1)).toEqual(['rate', 0.95]);
+    deck.setNudge(1);
+    expect(stretcher.calls.at(-1)?.[0]).toBe('rate');
+    deck.beatLoop(4);
+    expect(stretcher.calls.at(-1)?.[0]).toBe('loop');
+    deck.exitLoop();
+    expect(stretcher.calls.at(-1)).toEqual(['loop', null]);
+  });
+
+  it('停止でワークレットも止める', () => {
+    const { deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    deck.play();
+    deck.pause();
+    expect(stretcher.names().at(-1)).toBe('stop');
+  });
+
+  it('ワークレットが終端を知らせたら再生を止める', () => {
+    const { ctx, deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    deck.seek(119);
+    deck.play();
+    ctx.currentTime = 5;
+    stretcher.onEnded?.();
+    expect(deck.playing).toBe(false);
+    expect(deck.position).toBe(120);
+  });
+
+  it('キーロック中に曲を替えると新しい曲のサンプルを渡す', () => {
+    const { deck, stretcher } = withStretcher();
+    deck.setKeylock(true);
+    stretcher.calls.length = 0;
+    deck.load(buffer(30), 'next');
+    expect(stretcher.names()).toContain('load');
+  });
+
+  it('スナップショットに状態が出る', () => {
+    const { deck } = withStretcher();
+    expect(deck.snapshot()).toMatchObject({ keylock: false, keylockAvailable: true });
+    deck.setKeylock(true);
+    expect(deck.snapshot().keylock).toBe(true);
   });
 });
 

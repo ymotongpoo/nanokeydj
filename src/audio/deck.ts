@@ -2,6 +2,7 @@ import { HOTCUE_COUNT, type DeckId } from '../control/controls';
 import { Emitter } from '../util/emitter';
 import { beatLoopRegion, phaseCorrection } from './beatgrid';
 import { PlaybackClock, type LoopRegion } from './clock';
+import type { Stretcher } from './stretch-player';
 
 /** nudge（一時的なテンポ微調整）の最大幅。±5 %。 */
 const NUDGE_DEPTH = 0.05;
@@ -29,6 +30,8 @@ export interface DeckSnapshot {
   hotcues: (number | null)[];
   /** ループインだけ押して、アウトを待っているときの始点。 */
   loopInPoint: number | null;
+  keylock: boolean;
+  keylockAvailable: boolean;
 }
 
 /** 1 台のデッキ。バッファを再生し、位置とテンポとループを管理する。 */
@@ -50,6 +53,10 @@ export class Deck {
   private _hotcues: (number | null)[] = Array.from({ length: HOTCUE_COUNT }, () => null);
   private previewing = false;
   private _loopInPoint: number | null = null;
+  private stretcher: Stretcher | null = null;
+  private _keylock = false;
+  /** いま音を出しているのが時間伸縮の経路か。 */
+  private stretching = false;
 
   constructor(
     readonly id: DeckId,
@@ -117,6 +124,15 @@ export class Deck {
     return this._loopInPoint;
   }
 
+  /** キーロック: テンポを変えても音程を変えない。 */
+  get keylock(): boolean {
+    return this._keylock;
+  }
+
+  get keylockAvailable(): boolean {
+    return this.stretcher !== null;
+  }
+
   get loop(): LoopRegion | null {
     return this.clock?.loop ?? null;
   }
@@ -141,6 +157,8 @@ export class Deck {
       cuePoint: this._cuePoint,
       hotcues: [...this._hotcues],
       loopInPoint: this._loopInPoint,
+      keylock: this._keylock,
+      keylockAvailable: this.stretcher !== null,
     };
   }
 
@@ -157,7 +175,41 @@ export class Deck {
     this._hotcues = this._hotcues.map(() => null);
     this.previewing = false;
     this._loopInPoint = null;
+    if (this._keylock) this.loadStretcherData();
     this.onChange.emit();
+  }
+
+  /** ワークレットが使えるようになったら、エンジンが渡す。 */
+  attachStretcher(stretcher: Stretcher): void {
+    this.stretcher = stretcher;
+    stretcher.output.connect(this.output);
+    stretcher.onEnded = () => {
+      if (!this.stretching) return;
+      this.stretching = false;
+      this.clock?.pause(this.ctx.currentTime);
+      this.onChange.emit();
+    };
+    if (this._keylock) this.loadStretcherData();
+    this.onChange.emit();
+  }
+
+  setKeylock(on: boolean): void {
+    if (on === this._keylock || (on && !this.stretcher)) return;
+    this._keylock = on;
+    if (on) this.loadStretcherData();
+    // 再生中なら、新しい経路で同じ位置から鳴らし直す。
+    if (this.clock?.isPlaying) this.startSource();
+    if (!on) this.stretcher?.unload();
+    this.onChange.emit();
+  }
+
+  /** 時間伸縮は曲のサンプルをワークレットへ複製するので、キーロックが入っているときだけ渡す。 */
+  private loadStretcherData(): void {
+    const buffer = this.buffer;
+    if (!this.stretcher || !buffer) return;
+    this.stretcher.load(
+      Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c)),
+    );
   }
 
   setAnalyzing(analyzing: boolean): void {
@@ -371,13 +423,16 @@ export class Deck {
     clock.setLoop(now, loop);
     const after = clock.positionAt(now);
     const source = this.source;
-    if (source && Math.abs(after - before) < 1e-3) {
+    const unchanged = Math.abs(after - before) < 1e-3;
+    if (source && unchanged) {
       // 位置が変わらないなら、再生中のノードのループ設定だけを差し替える（途切れない）。
       source.loop = loop !== null;
       if (loop) {
         source.loopStart = loop.start;
         source.loopEnd = loop.end;
       }
+    } else if (this.stretching && unchanged) {
+      this.stretcher?.setLoop(loop);
     } else if (clock.isPlaying) {
       this.startSource();
     }
@@ -390,6 +445,7 @@ export class Deck {
     const now = this.ctx.currentTime;
     clock.setRate(now, this.rate);
     if (this.source) this.source.playbackRate.setValueAtTime(this.rate, now);
+    if (this.stretching) this.stretcher?.setRate(this.rate);
   }
 
   private startSource(): void {
@@ -397,6 +453,11 @@ export class Deck {
     const buffer = this.buffer;
     if (!clock || !buffer) return;
     this.stopSource();
+    if (this._keylock && this.stretcher) {
+      this.stretcher.play(this.ctx.currentTime, clock.positionAt(this.ctx.currentTime), clock.rate, clock.loop);
+      this.stretching = true;
+      return;
+    }
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = clock.rate;
@@ -418,6 +479,10 @@ export class Deck {
   }
 
   private stopSource(): void {
+    if (this.stretching) {
+      this.stretcher?.stop();
+      this.stretching = false;
+    }
     const source = this.source;
     if (!source) return;
     source.onended = null;

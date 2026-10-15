@@ -25,6 +25,7 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
 
     registry.setHandler(`deck.${id}.play`, () => deck.togglePlay());
     registry.setHandler(`deck.${id}.sync`, () => deck.sync(engine.decks[otherDeck(id)]));
+    registry.setHandler(`deck.${id}.keylock`, () => deck.setKeylock(!deck.keylock));
     registry.setHandler(`deck.${id}.tempo`, (v) =>
       deck.setTempoRate(tempoRate(v, engine.tempoRange, engine.tempoInvert)),
     );

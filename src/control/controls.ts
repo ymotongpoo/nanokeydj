@@ -35,6 +35,7 @@ export function allControlDefs(): ControlDef[] {
       { id: `deck.${deck}.play`, label: `${group} Play`, kind: 'trigger', group },
       { id: `deck.${deck}.cue`, label: `${group} Cue`, kind: 'hold', group },
       { id: `deck.${deck}.sync`, label: `${group} Sync`, kind: 'trigger', group },
+      { id: `deck.${deck}.keylock`, label: `${group} キーロック`, kind: 'trigger', group },
       { id: `deck.${deck}.tempo`, label: `${group} テンポ`, kind: 'continuous', group },
     );
     for (let n = 1; n <= HOTCUE_COUNT; n++) {

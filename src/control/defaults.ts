@@ -45,6 +45,7 @@ function nanoKontrol2Defaults(): Binding[] {
       cc(`deck.${deck}.play`, 32 + offset),
       cc(`deck.${deck}.cue`, 48 + offset),
       cc(`deck.${deck}.sync`, 64 + offset),
+      cc(`deck.${deck}.keylock`, 65 + offset),
     );
   }
   return bindings;
