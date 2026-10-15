@@ -4,6 +4,7 @@ import type { CueRouting } from '../audio/mixer';
 import { DECK_IDS, type DeckId } from '../control/controls';
 import type { Controller } from '../control/controller';
 import type { LedFeedback } from '../control/led';
+import { MixRecorder, formatElapsed, recordingFileName } from '../audio/recorder';
 import { bindButton, createSlider } from './controls';
 import { h } from './dom';
 
@@ -171,10 +172,46 @@ export function createMixerView(
   if (savedRouting === 'split' || savedRouting === 'quad') engine.mixer.setRouting(savedRouting);
   routing.value = engine.mixer.routing;
 
+  // 録音: マスター出力をファイルに保存する。録音の仕組みは、初めて押したときに用意する。
+  let recorder: MixRecorder | null = null;
+  const recStatus = h('span', { class: 'rec-status' });
+  const recButton = h('button', {
+    class: 'btn-small btn-rec',
+    text: '● REC',
+    attrs: { title: 'マスター出力を録音して保存する' },
+    on: {
+      click: () => {
+        void toggleRecording();
+      },
+    },
+  });
+  const toggleRecording = async () => {
+    await engine.resume();
+    recorder ??= new MixRecorder(engine.mixer.recordingStream);
+    if (!recorder.supported) {
+      recStatus.textContent = 'このブラウザは録音に対応していません';
+      return;
+    }
+    if (!recorder.recording) {
+      recorder.start();
+      return;
+    }
+    const blob = await recorder.stop();
+    if (!blob || !recorder.format) return;
+    const link = h('a', {
+      attrs: {
+        href: URL.createObjectURL(blob),
+        download: recordingFileName(new Date(), recorder.format.extension),
+      },
+    });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  };
+
   const el = h(
     'section',
     { class: 'panel mixer' },
-    h('header', {}, h('h2', { text: 'MIXER' })),
+    h('header', {}, h('h2', { text: 'MIXER' }), h('div', { class: 'rec' }, recStatus, recButton)),
     h('div', { class: 'channels' }, channel('A'), h('div', { class: 'master' }, master.el, masterMeter.el), channel('B')),
     crossfader.el,
     h('div', { class: 'headphones' }, headphoneVolume.el, headphoneMix.el),
@@ -207,6 +244,11 @@ export function createMixerView(
 
   const update = () => {
     for (const updater of updaters) updater();
+    const recording = recorder?.recording ?? false;
+    recButton.classList.toggle('recording', recording);
+    recButton.textContent = recording ? '■ STOP' : '● REC';
+    if (recording) recStatus.textContent = formatElapsed(recorder!.elapsed);
+    else if (recorder?.supported !== false) recStatus.textContent = '';
     // CUE ボタンの点灯は、押している間ではなくチャンネルの Cue の入り切りを映す。
     for (const id of DECK_IDS) cueButtons.get(id)?.classList.toggle('active', engine.mixer.channels[id].cue);
     for (const id of DECK_IDS) meters.get(id)?.set(engine.mixer.channels[id].level());

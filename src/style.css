@@ -499,6 +499,24 @@ select {
   color: #1a1500;
 }
 
+.rec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-status {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-rec.recording {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
+
 .headphones {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -140,6 +140,7 @@ export class Mixer {
    */
   private readonly maxChannels: number;
   private destinationIsQuad = false;
+  private recordDestination: MediaStreamAudioDestinationNode | null = null;
 
   private crossfader = 0.5;
   private curve: CrossfaderCurve = 'smooth';
@@ -197,6 +198,21 @@ export class Mixer {
     this.applyRouting();
   }
 
+  /**
+   * マスター出力を録音するためのストリーム。初めて呼んだときにタップをつなぐ。
+   * ヘッドホンの Cue は含まない。
+   */
+  get recordingStream(): MediaStream {
+    if (!this.recordDestination) {
+      if (!('createMediaStreamDestination' in this.ctx)) {
+        throw new Error('このコンテキストは録音に対応していません');
+      }
+      this.recordDestination = (this.ctx as AudioContext).createMediaStreamDestination();
+      this.masterOut.connect(this.recordDestination);
+    }
+    return this.recordDestination.stream;
+  }
+
   setMaster(value: number): void {
     setSmooth(this.ctx, this.master.gain, volumeGain(value));
   }
@@ -238,6 +254,8 @@ export class Mixer {
   /** 出し方に応じて、マスターとヘッドホンの出力先をつなぎ替える。 */
   private applyRouting(): void {
     this.masterOut.disconnect();
+    // つなぎ替えで録音用のタップも外れるので、つなぎ直す。
+    if (this.recordDestination) this.masterOut.connect(this.recordDestination);
     this.headphoneOut.disconnect();
     for (const node of this.routingNodes) node.disconnect();
     this.routingNodes = [];
