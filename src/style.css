@@ -127,3 +127,58 @@ button:hover {
   color: var(--accent-a);
   width: 100px;
 }
+
+.mapping summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.mapping-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.mapping-hint {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.mapping-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.mapping-group h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--accent-a);
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.mapping-row-active {
+  background: #2b3550;
+  border-radius: 4px;
+}
+
+.mapping-source {
+  color: var(--muted);
+}
+
+.mapping-row button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
