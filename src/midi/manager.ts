@@ -65,6 +65,18 @@ export class MidiManager {
     return ports;
   }
 
+  /** 指定した機種の、接続中の出力ポートすべてへ送る。送ったポートの数を返す。 */
+  send(device: DeviceKind, data: number[]): number {
+    if (!this.access) return 0;
+    let sent = 0;
+    for (const output of this.access.outputs.values()) {
+      if (output.state !== 'connected' || identifyDevice(output.name) !== device) continue;
+      output.send(data);
+      sent++;
+    }
+    return sent;
+  }
+
   /** 実機がなくても同じ経路でメッセージを流すための入口。画面上のコントロールとテストが使う。 */
   inject(device: DeviceKind, data: ArrayLike<number>): void {
     const message = parseMidiMessage(data);

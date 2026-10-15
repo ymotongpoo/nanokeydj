@@ -2,6 +2,7 @@ import type { Engine } from '../audio/engine';
 import type { CrossfaderCurve } from '../audio/curves';
 import { DECK_IDS, type DeckId } from '../control/controls';
 import type { Controller } from '../control/controller';
+import type { LedFeedback } from '../control/led';
 import { createSlider } from './controls';
 import { h } from './dom';
 
@@ -22,7 +23,11 @@ export interface MixerView {
   update(): void;
 }
 
-export function createMixerView(engine: Engine, controller: Controller): MixerView {
+export function createMixerView(
+  engine: Engine,
+  controller: Controller,
+  led: LedFeedback,
+): MixerView {
   const registry = controller.registry;
   const updaters: (() => void)[] = [];
   const meters = new Map<DeckId | 'master', ReturnType<typeof createMeter>>();
@@ -105,6 +110,15 @@ export function createMixerView(engine: Engine, controller: Controller): MixerVi
     },
   });
 
+  const ledBox = h('input', {
+    attrs: { type: 'checkbox', ...(led.enabled ? { checked: '' } : {}) },
+    on: {
+      change: () => {
+        led.enabled = ledBox.checked;
+      },
+    },
+  });
+
   const el = h(
     'section',
     { class: 'panel mixer' },
@@ -118,6 +132,16 @@ export function createMixerView(engine: Engine, controller: Controller): MixerVi
       h('label', {}, 'テンポ ', range),
       h('label', {}, invert, ' 上が遅い'),
       h('label', { attrs: { title: '実機の値が画面の値に追いつくまで、反映を待つ' } }, pickup, ' ピックアップ'),
+      h(
+        'label',
+        {
+          attrs: {
+            title: 'nanoKONTROL2 のボタン LED を点灯させる。KONTROL Editor で LED モードを External にしておく',
+          },
+        },
+        ledBox,
+        ' LED 出力',
+      ),
     ),
   );
 

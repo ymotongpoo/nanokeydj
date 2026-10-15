@@ -12,10 +12,30 @@ function fakeInput(id: string, name: string): FakeInput {
   return { id, name, state: 'connected', onmidimessage: null };
 }
 
-function fakeAccess(inputs: FakeInput[]) {
+interface FakeOutput {
+  id: string;
+  name: string;
+  state: 'connected' | 'disconnected';
+  sent: number[][];
+  send(data: number[]): void;
+}
+
+function fakeOutput(id: string, name: string): FakeOutput {
+  const output: FakeOutput = {
+    id,
+    name,
+    state: 'connected',
+    sent: [],
+    send: (data) => void output.sent.push(data),
+  };
+  return output;
+}
+
+function fakeAccess(inputs: FakeInput[], outputs: FakeOutput[] = []) {
   const map = new Map(inputs.map((i) => [i.id, i]));
   return {
     inputs: map,
+    outputs: new Map(outputs.map((o) => [o.id, o])),
     onstatechange: null as (() => void) | null,
     set(next: FakeInput[]) {
       map.clear();
@@ -113,5 +133,30 @@ describe('MidiManager', () => {
     midi.inject('nanokey2', [0xf8]);
     expect(events).toHaveLength(1);
     expect(events[0]?.message).toEqual({ type: 'pitchBend', channel: 1, value: 8192 });
+  });
+
+  it('send は同じ機種の接続中の出力ポートにだけ送る', async () => {
+    const kontrol = fakeOutput('o1', 'nanoKONTROL2 CTRL');
+    const kontrolCopy = fakeOutput('o2', 'nanoKONTROL2 SLIDER/KNOB');
+    const pad = fakeOutput('o3', 'nanoPAD2 PAD');
+    const gone = fakeOutput('o4', 'nanoKONTROL2 OLD');
+    gone.state = 'disconnected';
+    stubMidi(fakeAccess([], [kontrol, kontrolCopy, pad, gone]));
+    const midi = new MidiManager();
+    await midi.start();
+
+    expect(midi.send('nanokontrol2', [0xb0, 32, 127])).toBe(2);
+    expect(kontrol.sent).toEqual([[0xb0, 32, 127]]);
+    expect(kontrolCopy.sent).toEqual([[0xb0, 32, 127]]);
+    expect(pad.sent).toEqual([]);
+    expect(gone.sent).toEqual([]);
+  });
+
+  it('開始前や出力がなければ send は 0 を返す', async () => {
+    const midi = new MidiManager();
+    expect(midi.send('nanokontrol2', [0xb0, 1, 1])).toBe(0);
+    stubMidi(fakeAccess([], []));
+    await midi.start();
+    expect(midi.send('nanokontrol2', [0xb0, 1, 1])).toBe(0);
   });
 });

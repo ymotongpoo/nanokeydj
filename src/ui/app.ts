@@ -1,6 +1,7 @@
 import type { Engine } from '../audio/engine';
 import type { Controller } from '../control/controller';
 import { DECK_IDS } from '../control/controls';
+import { computeLedStates, LedFeedback } from '../control/led';
 import type { MidiManager } from '../midi/manager';
 import { createDeckView } from './deck-view';
 import { h } from './dom';
@@ -16,7 +17,12 @@ export function mountApp(
   midi: MidiManager,
 ): void {
   const decks = DECK_IDS.map((id) => createDeckView(engine, controller.registry, id));
-  const mixer = createMixerView(engine, controller);
+  const led = new LedFeedback(midi, controller.bindings, () =>
+    computeLedStates({ A: engine.decks.A.snapshot(), B: engine.decks.B.snapshot() }, engine.focused),
+  );
+  // 機器を挿し直したら、LED の状態を送り直す。
+  midi.onPortsChanged.on(() => led.resync());
+  const mixer = createMixerView(engine, controller, led);
 
   const banner = h('button', {
     class: 'audio-banner',
@@ -40,6 +46,7 @@ export function mountApp(
     banner.hidden = engine.running;
     for (const deck of decks) deck.update();
     mixer.update();
+    led.update();
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
