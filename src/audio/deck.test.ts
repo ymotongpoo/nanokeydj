@@ -216,6 +216,79 @@ describe('ループとビートジャンプ', () => {
   });
 });
 
+describe('手動ループ', () => {
+  it('ループインとアウトで、その区間のループが入る', () => {
+    const { ctx, deck } = setup();
+    deck.seek(10);
+    deck.loopIn();
+    expect(deck.loop).toBeNull();
+    expect(deck.loopInPoint).toBeCloseTo(10);
+    deck.play();
+    ctx.currentTime = 1.5;
+    deck.loopOut();
+    expect(deck.loopInPoint).toBeNull();
+    expect(deck.loop?.start).toBeCloseTo(10);
+    expect(deck.loop?.end).toBeCloseTo(11.5);
+    ctx.currentTime = 2.5;
+    expect(deck.position).toBeGreaterThanOrEqual(10);
+    expect(deck.position).toBeLessThan(11.5);
+  });
+
+  it('ループインなしのアウトは何もしない', () => {
+    const { deck } = setup();
+    deck.seek(10);
+    deck.loopOut();
+    expect(deck.loop).toBeNull();
+  });
+
+  it('短すぎる区間は受け付けない', () => {
+    const { deck } = setup();
+    deck.seek(10);
+    deck.loopIn();
+    deck.loopOut();
+    expect(deck.loop).toBeNull();
+    expect(deck.loopInPoint).toBeCloseTo(10);
+  });
+
+  it('ループ中のインとアウトは、始点と終点だけを動かす', () => {
+    const { ctx, deck } = setup();
+    deck.seek(10);
+    deck.loopIn();
+    deck.seek(12);
+    deck.loopOut();
+    expect(deck.loop).toEqual({ start: 10, end: 12 });
+
+    deck.seek(10.5);
+    deck.loopIn();
+    expect(deck.loop).toEqual({ start: 10.5, end: 12 });
+
+    deck.play();
+    ctx.currentTime = 0.5;
+    deck.loopOut();
+    expect(deck.loop?.start).toBeCloseTo(10.5);
+    expect(deck.loop?.end).toBeCloseTo(11);
+  });
+
+  it('解除はループイン待ちの始点も取り消す', () => {
+    const { deck } = setup();
+    deck.seek(10);
+    deck.loopIn();
+    deck.exitLoop();
+    expect(deck.loopInPoint).toBeNull();
+    deck.seek(12);
+    deck.loopOut();
+    expect(deck.loop).toBeNull();
+  });
+
+  it('曲を替えるとループイン待ちを捨てる', () => {
+    const { deck } = setup();
+    deck.seek(10);
+    deck.loopIn();
+    deck.load(buffer(60), 'next');
+    expect(deck.loopInPoint).toBeNull();
+  });
+});
+
 describe('テンポと Sync', () => {
   it('nudge は一時的に再生レートを上下させ、0 で元に戻る', () => {
     const { deck } = setup();

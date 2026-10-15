@@ -6,7 +6,8 @@ import type { Binding } from './bindings';
  *
  * nanoKONTROL2（CC モード）:
  *   フェーダー CC 0〜7、ノブ CC 16〜23、S は CC 32〜39、M は CC 48〜55、R は CC 64〜71
- *   Play 41、Stop 42、Rew 43、FF 44、Rec 45、Cycle 46、Track ◀ 58、Track ▶ 59、Marker Set 60
+ *   Play 41、Stop 42、Rew 43、FF 44、Rec 45、Cycle 46、Track ◀ 58、Track ▶ 59、
+ *   Marker Set 60、Marker ◀ 61、Marker ▶ 62
  * nanoPAD2: シーン 1 のパッドがノート 36〜51 を送る前提（未確認）。
  * nanoKEY2: 鍵盤はオクターブを無視した音名で、ピッチベンドボタンは Pitch Bend で受ける。
  */
@@ -26,6 +27,8 @@ function nanoKontrol2Defaults(): Binding[] {
     cc('focus.A', 58),
     cc('focus.B', 59),
     cc('focused.play', 41),
+    cc('focused.loop.in', 61),
+    cc('focused.loop.out', 62),
     cc('focused.loop.exit', 46),
     cc('modifier.delete', 60),
   ];

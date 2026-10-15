@@ -90,6 +90,18 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     });
     return { beats, button };
   });
+  const loopIn = h('button', {
+    class: 'btn-loop',
+    text: 'In',
+    attrs: { title: 'ループイン（始点）' },
+    on: { click: () => deck.loopIn() },
+  });
+  const loopOut = h('button', {
+    class: 'btn-loop',
+    text: 'Out',
+    attrs: { title: 'ループアウト（終点）' },
+    on: { click: () => deck.loopOut() },
+  });
   const loopExit = h('button', {
     class: 'btn-loop',
     text: 'Exit',
@@ -139,7 +151,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     ),
     h('div', { class: 'transport' }, play, cue, sync),
     h('div', { class: 'hotcue-row' }, ...hotcueButtons),
-    h('div', { class: 'loop-row' }, ...loopButtons.map((l) => l.button), loopExit),
+    h('div', { class: 'loop-row' }, ...loopButtons.map((l) => l.button), loopIn, loopOut, loopExit),
     h('div', { class: 'load-row' }, loadButton, demoButton, status, fileInput),
   );
 
@@ -185,6 +197,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
       const time = snapshot.hotcues[i];
       button.classList.toggle('set', time !== null && time !== undefined);
     });
+    loopIn.classList.toggle('active', snapshot.loopInPoint !== null);
     for (const { beats, button } of loopButtons) {
       const active =
         snapshot.loop !== null &&
@@ -206,6 +219,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
           loop: snapshot.loop,
           cues: [
             { time: snapshot.cuePoint, label: 'C' },
+            ...(snapshot.loopInPoint === null ? [] : [{ time: snapshot.loopInPoint, label: 'IN' }]),
             ...snapshot.hotcues.flatMap((time, i) =>
               time === null ? [] : [{ time, label: String(i + 1) }],
             ),

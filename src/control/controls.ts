@@ -77,6 +77,8 @@ export function allControlDefs(): ControlDef[] {
     { id: 'focused.cue', label: 'Cue', kind: 'hold', group: focusGroup },
     { id: 'focused.sync', label: 'Sync', kind: 'trigger', group: focusGroup },
     { id: 'focused.nudge', label: 'Nudge', kind: 'continuous', group: focusGroup, springReturn: true },
+    { id: 'focused.loop.in', label: 'ループイン', kind: 'trigger', group: focusGroup },
+    { id: 'focused.loop.out', label: 'ループアウト', kind: 'trigger', group: focusGroup },
     { id: 'focused.loop.exit', label: 'ループ解除', kind: 'trigger', group: focusGroup },
   );
   for (const beats of LOOP_BEATS) {

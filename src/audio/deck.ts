@@ -9,6 +9,9 @@ const NUDGE_DEPTH = 0.05;
 /** Cue ボタンで、いまの位置がキューポイント上にあるとみなす許容幅（秒）。 */
 const CUE_EPSILON = 0.03;
 
+/** 手動ループの最短の長さ（秒）。誤操作で極端に短いループが入るのを防ぐ。 */
+const MIN_LOOP_SECONDS = 0.02;
+
 export interface DeckSnapshot {
   loaded: boolean;
   name: string;
@@ -24,6 +27,8 @@ export interface DeckSnapshot {
   analyzing: boolean;
   cuePoint: number;
   hotcues: (number | null)[];
+  /** ループインだけ押して、アウトを待っているときの始点。 */
+  loopInPoint: number | null;
 }
 
 /** 1 台のデッキ。バッファを再生し、位置とテンポとループを管理する。 */
@@ -44,6 +49,7 @@ export class Deck {
   private _cuePoint = 0;
   private _hotcues: (number | null)[] = Array.from({ length: HOTCUE_COUNT }, () => null);
   private previewing = false;
+  private _loopInPoint: number | null = null;
 
   constructor(
     readonly id: DeckId,
@@ -107,6 +113,10 @@ export class Deck {
     return this._hotcues;
   }
 
+  get loopInPoint(): number | null {
+    return this._loopInPoint;
+  }
+
   get loop(): LoopRegion | null {
     return this.clock?.loop ?? null;
   }
@@ -130,6 +140,7 @@ export class Deck {
       analyzing: this._analyzing,
       cuePoint: this._cuePoint,
       hotcues: [...this._hotcues],
+      loopInPoint: this._loopInPoint,
     };
   }
 
@@ -145,6 +156,7 @@ export class Deck {
     this._cuePoint = 0;
     this._hotcues = this._hotcues.map(() => null);
     this.previewing = false;
+    this._loopInPoint = null;
     this.onChange.emit();
   }
 
@@ -275,8 +287,45 @@ export class Deck {
     this.setLoop(beatLoopRegion(this.position, this._firstBeat, this._bpm, beats));
   }
 
+  /**
+   * ループイン。ループ中ならループの始点を今の位置へ動かす。
+   * ループがなければ始点だけを覚え、ループアウトで確定する。
+   */
+  loopIn(): void {
+    if (!this.clock) return;
+    const position = this.position;
+    const loop = this.loop;
+    if (loop) {
+      if (loop.end - position >= MIN_LOOP_SECONDS) this.setLoop({ start: position, end: loop.end });
+      return;
+    }
+    this._loopInPoint = position;
+    this.onChange.emit();
+  }
+
+  /** ループアウト。ループ中ならループの終点を今の位置へ動かす。 */
+  loopOut(): void {
+    if (!this.clock) return;
+    const position = this.position;
+    const loop = this.loop;
+    if (loop) {
+      if (position - loop.start >= MIN_LOOP_SECONDS) this.setLoop({ start: loop.start, end: position });
+      return;
+    }
+    const start = this._loopInPoint;
+    if (start === null || position - start < MIN_LOOP_SECONDS) return;
+    this._loopInPoint = null;
+    this.setLoop({ start, end: position });
+  }
+
+  /** ループを解除する。ループイン待ちのときは、その始点も取り消す。 */
   exitLoop(): void {
-    if (this.loop) this.setLoop(null);
+    if (this.loop) {
+      this.setLoop(null);
+    } else if (this._loopInPoint !== null) {
+      this._loopInPoint = null;
+      this.onChange.emit();
+    }
   }
 
   /** 拍の数だけ位置を前後させる。ループ中はループも一緒に動かす。曲の外に出るなら何もしない。 */

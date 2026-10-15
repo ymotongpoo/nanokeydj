@@ -67,6 +67,8 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
     const offset = (v - 0.5) * 2;
     focusedDeck().setNudge(Math.abs(offset) < NUDGE_DEAD_ZONE ? 0 : offset);
   });
+  registry.setHandler('focused.loop.in', () => focusedDeck().loopIn());
+  registry.setHandler('focused.loop.out', () => focusedDeck().loopOut());
   registry.setHandler('focused.loop.exit', () => focusedDeck().exitLoop());
   for (const beats of LOOP_BEATS) {
     registry.setHandler(`focused.loop.${beats}`, () => focusedDeck().beatLoop(beats));
