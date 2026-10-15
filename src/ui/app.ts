@@ -16,7 +16,7 @@ export function mountApp(
   midi: MidiManager,
 ): void {
   const decks = DECK_IDS.map((id) => createDeckView(engine, controller.registry, id));
-  const mixer = createMixerView(engine, controller.registry);
+  const mixer = createMixerView(engine, controller);
 
   const banner = h('button', {
     class: 'audio-banner',

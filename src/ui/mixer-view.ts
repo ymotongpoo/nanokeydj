@@ -1,7 +1,7 @@
 import type { Engine } from '../audio/engine';
 import type { CrossfaderCurve } from '../audio/curves';
 import { DECK_IDS, type DeckId } from '../control/controls';
-import type { ControlRegistry } from '../control/registry';
+import type { Controller } from '../control/controller';
 import { createSlider } from './controls';
 import { h } from './dom';
 
@@ -22,7 +22,8 @@ export interface MixerView {
   update(): void;
 }
 
-export function createMixerView(engine: Engine, registry: ControlRegistry): MixerView {
+export function createMixerView(engine: Engine, controller: Controller): MixerView {
+  const registry = controller.registry;
   const updaters: (() => void)[] = [];
   const meters = new Map<DeckId | 'master', ReturnType<typeof createMeter>>();
 
@@ -95,6 +96,15 @@ export function createMixerView(engine: Engine, registry: ControlRegistry): Mixe
     },
   });
 
+  const pickup = h('input', {
+    attrs: { type: 'checkbox', ...(controller.pickupEnabled ? { checked: '' } : {}) },
+    on: {
+      change: () => {
+        controller.pickupEnabled = pickup.checked;
+      },
+    },
+  });
+
   const el = h(
     'section',
     { class: 'panel mixer' },
@@ -107,6 +117,7 @@ export function createMixerView(engine: Engine, registry: ControlRegistry): Mixe
       h('label', {}, 'カーブ ', curve),
       h('label', {}, 'テンポ ', range),
       h('label', {}, invert, ' 上が遅い'),
+      h('label', { attrs: { title: '実機の値が画面の値に追いつくまで、反映を待つ' } }, pickup, ' ピックアップ'),
     ),
   );
 

@@ -13,6 +13,8 @@ export interface ControlDef {
   label: string;
   kind: ControlKind;
   group: string;
+  /** ピッチベンドのように、離すと中央へ戻る入力。ピックアップの対象にしない。 */
+  springReturn?: boolean;
 }
 
 export const HOTCUE_COUNT = 8;
@@ -74,7 +76,7 @@ export function allControlDefs(): ControlDef[] {
     { id: 'focused.play', label: 'Play', kind: 'trigger', group: focusGroup },
     { id: 'focused.cue', label: 'Cue', kind: 'hold', group: focusGroup },
     { id: 'focused.sync', label: 'Sync', kind: 'trigger', group: focusGroup },
-    { id: 'focused.nudge', label: 'Nudge', kind: 'continuous', group: focusGroup },
+    { id: 'focused.nudge', label: 'Nudge', kind: 'continuous', group: focusGroup, springReturn: true },
     { id: 'focused.loop.exit', label: 'ループ解除', kind: 'trigger', group: focusGroup },
   );
   for (const beats of LOOP_BEATS) {

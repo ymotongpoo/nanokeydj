@@ -149,6 +149,7 @@ describe('defaultBindings', () => {
 describe('Controller', () => {
   it('MIDI 入力を初期割り当てでコントロールに配信する', () => {
     const controller = new Controller(null, memoryStorage());
+    controller.pickupEnabled = false;
     const volume = vi.fn();
     controller.registry.setHandler('mixer.A.volume', volume);
     controller.handleInput({ device: 'nanokontrol2', type: 'cc', number: 0 }, 0.5);
@@ -222,5 +223,61 @@ describe('Controller', () => {
     );
     expect(controller.bindings.resolve({ device: 'nanokontrol2', type: 'cc', number: 99 })).toBeUndefined();
     expect(storage.data[STORAGE_KEY]).toBeUndefined();
+  });
+
+  describe('ピックアップ', () => {
+    const fader = { device: 'nanokontrol2', type: 'cc', number: 0 } as const;
+
+    it('実機の値が画面の値から遠いうちは反映せず、追いついたら反映する', () => {
+      const controller = new Controller(null, memoryStorage());
+      const volume = vi.fn();
+      controller.registry.setHandler('mixer.A.volume', volume);
+      controller.registry.dispatch('mixer.A.volume', 0.8);
+      volume.mockClear();
+
+      controller.handleInput(fader, 0.1);
+      controller.handleInput(fader, 0.4);
+      expect(volume).not.toHaveBeenCalled();
+      expect(controller.pickupWaiting).toBe(1);
+
+      controller.handleInput(fader, 0.79);
+      expect(volume).toHaveBeenCalledWith(0.79);
+      expect(controller.pickupWaiting).toBe(0);
+    });
+
+    it('切るとすぐ反映する', () => {
+      const controller = new Controller(null, memoryStorage());
+      const volume = vi.fn();
+      controller.registry.setHandler('mixer.A.volume', volume);
+      controller.registry.dispatch('mixer.A.volume', 0.8);
+      controller.pickupEnabled = false;
+      volume.mockClear();
+      controller.handleInput(fader, 0.1);
+      expect(volume).toHaveBeenCalledWith(0.1);
+    });
+
+    it('設定を保存して次回に引き継ぐ', () => {
+      const storage = memoryStorage();
+      const first = new Controller(null, storage);
+      expect(first.pickupEnabled).toBe(true);
+      first.pickupEnabled = false;
+      expect(new Controller(null, storage).pickupEnabled).toBe(false);
+    });
+
+    it('ピッチベンドのように戻るコントロールは対象外', () => {
+      const controller = new Controller(null, memoryStorage());
+      const nudge = vi.fn();
+      controller.registry.setHandler('focused.nudge', nudge);
+      controller.handleInput({ device: 'nanokey2', type: 'pitchBend', number: 0 }, 1);
+      expect(nudge).toHaveBeenCalledWith(1);
+    });
+
+    it('ボタン類は対象外', () => {
+      const controller = new Controller(null, memoryStorage());
+      const play = vi.fn();
+      controller.registry.setHandler('deck.A.play', play);
+      controller.handleInput({ device: 'nanokontrol2', type: 'cc', number: 32 }, 1);
+      expect(play).toHaveBeenCalledTimes(1);
+    });
   });
 });
