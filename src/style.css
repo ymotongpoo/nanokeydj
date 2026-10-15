@@ -451,6 +451,23 @@ select {
   grid-template-columns: repeat(10, 1fr);
 }
 
+.grid-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.grid-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.btn-grid {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .btn-hotcue,
 .btn-loop {
   padding: 6px 0;

@@ -4,6 +4,7 @@ import { Deck } from './deck';
 import { Mixer } from './mixer';
 import { mixToMono } from './peaks';
 import { StretchPlayer } from './stretch-player';
+import { TrackStore, trackKey } from './track-store';
 
 export interface DeckBuffers {
   A: AudioBuffer | null;
@@ -23,12 +24,35 @@ export class Engine {
   /** キーロック（AudioWorklet）が使えるようになったか。使えない環境では false で解決する。 */
   readonly keylockReady: Promise<boolean>;
 
+  private store = new TrackStore();
+  private trackKeys: Record<DeckId, string | null> = { A: null, B: null };
+  private lastSaved: Record<DeckId, string> = { A: '', B: '' };
+  private saveTimers: Partial<Record<DeckId, ReturnType<typeof setTimeout>>> = {};
+
   constructor(ctx: AudioContext = new AudioContext({ latencyHint: 'interactive' })) {
     this.ctx = ctx;
     this.mixer = new Mixer(ctx);
     this.decks = { A: new Deck('A', ctx), B: new Deck('B', ctx) };
     for (const id of DECK_IDS) this.decks[id].output.connect(this.mixer.channels[id].input);
+    for (const id of DECK_IDS) this.decks[id].onChange.on(() => this.scheduleSave(id));
     this.keylockReady = this.initKeylock();
+  }
+
+  /** グリッドやキューの手直しを、少し間を置いて曲ごとに保存する。 */
+  private scheduleSave(id: DeckId): void {
+    clearTimeout(this.saveTimers[id]);
+    this.saveTimers[id] = setTimeout(() => this.saveNow(id), 400);
+  }
+
+  private saveNow(id: DeckId): void {
+    const key = this.trackKeys[id];
+    const deck = this.decks[id];
+    if (!key || !deck.loaded || deck.analyzing) return;
+    const state = deck.exportState();
+    const json = JSON.stringify(state);
+    if (json === this.lastSaved[id]) return;
+    this.lastSaved[id] = json;
+    this.store.set(key, state);
   }
 
   private async initKeylock(): Promise<boolean> {
@@ -64,6 +88,15 @@ export class Engine {
   loadBuffer(id: DeckId, buffer: AudioBuffer, name: string): void {
     const deck = this.decks[id];
     deck.load(buffer, name);
+
+    // 前に手直しした曲なら、その状態を戻す。BPM が分かっていれば解析はしない。
+    const key = trackKey(name, buffer.duration);
+    this.trackKeys[id] = key;
+    const saved = this.store.get(key);
+    this.lastSaved[id] = saved ? JSON.stringify(saved) : '';
+    if (saved) deck.restore(saved);
+    if (saved?.bpm != null) return;
+
     deck.setAnalyzing(true);
     void analyzeBpm(mixToMono(buffer), buffer.sampleRate).then((result) => {
       if (deck.audio !== buffer) return;

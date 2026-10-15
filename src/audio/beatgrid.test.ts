@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { beatLoopRegion, beatPhase, beatTimesIn, nearestBeat, phaseCorrection } from './beatgrid';
+import {
+  beatLoopRegion,
+  beatPhase,
+  beatTimesIn,
+  nearestBeat,
+  normalizeFirstBeat,
+  phaseCorrection,
+  tapBpm,
+} from './beatgrid';
 
 describe('beatPhase', () => {
   it('拍の頭で 0、半拍で 0.5', () => {
@@ -85,5 +93,53 @@ describe('beatLoopRegion', () => {
   it('曲頭より前に始点が出ない', () => {
     const { start } = beatLoopRegion(0.05, 0.4, 120, 4);
     expect(start).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('normalizeFirstBeat', () => {
+  it('位置を 0 以上 1 拍未満に収める', () => {
+    expect(normalizeFirstBeat(10.3, 120)).toBeCloseTo(0.3);
+    expect(normalizeFirstBeat(0.2, 120)).toBeCloseTo(0.2);
+    expect(normalizeFirstBeat(-0.1, 120)).toBeCloseTo(0.4);
+  });
+
+  it('収めたあとも同じグリッドを指す', () => {
+    const first = normalizeFirstBeat(37.77, 126);
+    expect(beatPhase(37.77, first, 126)).toBeCloseTo(0, 6);
+  });
+});
+
+describe('tapBpm', () => {
+  const taps = (intervals: number[], start = 1000) => {
+    const out = [start];
+    for (const i of intervals) out.push(out.at(-1)! + i);
+    return out;
+  };
+
+  it('叩く回数が足りなければ null', () => {
+    expect(tapBpm([])).toBeNull();
+    expect(tapBpm([1000])).toBeNull();
+    expect(tapBpm(taps([500]))).toBeNull();
+  });
+
+  it('等間隔なら、その間隔の BPM', () => {
+    expect(tapBpm(taps([500, 500, 500]))).toBeCloseTo(120);
+    expect(tapBpm(taps([468, 468, 468, 468]))).toBeCloseTo(128.2, 0);
+  });
+
+  it('1 回だけ大きくずれても、中央値で外れ値を無視する', () => {
+    expect(tapBpm(taps([500, 500, 620, 500, 500]))).toBeCloseTo(120);
+  });
+
+  it('長く空いたら、そこから叩き直したものとして扱う', () => {
+    const early = taps([400, 400, 400]);
+    const restart = taps([500, 500, 500], early.at(-1)! + 5000);
+    expect(tapBpm([...early, ...restart])).toBeCloseTo(120);
+  });
+
+  it('直近 8 回だけを見る', () => {
+    const slow = taps([600, 600, 600, 600]);
+    const fast = taps([500, 500, 500, 500, 500, 500, 500], slow.at(-1)! + 500);
+    expect(tapBpm([...slow, ...fast])).toBeCloseTo(120);
   });
 });

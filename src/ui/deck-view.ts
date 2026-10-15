@@ -1,6 +1,6 @@
 import { createDemoBuffer, DEMO_TRACKS } from '../audio/demo';
 import type { Engine } from '../audio/engine';
-import { beatTimesIn } from '../audio/beatgrid';
+import { beatTimesIn, tapBpm } from '../audio/beatgrid';
 import { computePeaks, mixToMono, type Peaks } from '../audio/peaks';
 import { HOTCUE_COUNT, LOOP_BEATS, type DeckId } from '../control/controls';
 import type { ControlRegistry } from '../control/registry';
@@ -108,6 +108,30 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     attrs: { title: 'ループアウト（終点）' },
     on: { click: () => deck.loopOut() },
   });
+  // ビートグリッドの手直し。検出が外れた曲を、耳で聴きながら合わせる。
+  const taps: number[] = [];
+  const gridButton = (text: string, title: string, onClick: (event: MouseEvent) => void) =>
+    h('button', { class: 'btn-grid', text, attrs: { title }, on: { click: onClick } });
+  const gridRow = h(
+    'div',
+    { class: 'grid-row' },
+    h('span', { class: 'grid-label', text: 'Grid' }),
+    gridButton('◀', 'グリッドを 10 ms 前へ（Shift で 1 ms）', (e) => deck.shiftGrid(e.shiftKey ? -0.001 : -0.01)),
+    gridButton('▶', 'グリッドを 10 ms 後ろへ（Shift で 1 ms）', (e) => deck.shiftGrid(e.shiftKey ? 0.001 : 0.01)),
+    gridButton('⌖', '今の位置を拍の頭にする', () => deck.setGridHere()),
+    h('span', { class: 'grid-label', text: 'BPM' }),
+    gridButton('−', 'BPM を 0.1 下げる（Shift で 0.01）', (e) => deck.bpm !== null && deck.setBpm(deck.bpm - (e.shiftKey ? 0.01 : 0.1))),
+    gridButton('＋', 'BPM を 0.1 上げる（Shift で 0.01）', (e) => deck.bpm !== null && deck.setBpm(deck.bpm + (e.shiftKey ? 0.01 : 0.1))),
+    gridButton('TAP', '聴こえる拍に合わせて叩いてテンポを決める', () => {
+      const now = performance.now();
+      if (taps.length > 0 && now - taps[taps.length - 1]! > 2000) taps.length = 0;
+      taps.push(now);
+      const tapped = tapBpm(taps);
+      // 叩いたのは聴こえているテンポなので、再生レートを割って曲そのもののテンポに直す。
+      if (tapped !== null) deck.setBpm(tapped / deck.rate);
+    }),
+  );
+
   const loopExit = h('button', {
     class: 'btn-loop',
     text: 'Exit',
@@ -158,6 +182,7 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     h('div', { class: 'transport' }, play, cue, sync),
     h('div', { class: 'hotcue-row' }, ...hotcueButtons),
     h('div', { class: 'loop-row' }, ...loopButtons.map((l) => l.button), loopIn, loopOut, loopExit),
+    gridRow,
     h('div', { class: 'load-row' }, loadButton, demoButton, status, fileInput),
   );
 

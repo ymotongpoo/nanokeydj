@@ -1,8 +1,9 @@
 import { HOTCUE_COUNT, type DeckId } from '../control/controls';
 import { Emitter } from '../util/emitter';
-import { beatLoopRegion, phaseCorrection } from './beatgrid';
+import { beatLoopRegion, normalizeFirstBeat, phaseCorrection } from './beatgrid';
 import { PlaybackClock, type LoopRegion } from './clock';
 import type { Stretcher } from './stretch-player';
+import type { TrackState } from './track-store';
 
 /** nudge（一時的なテンポ微調整）の最大幅。±5 %。 */
 const NUDGE_DEPTH = 0.05;
@@ -225,10 +226,48 @@ export class Deck {
     this.onChange.emit();
   }
 
-  /** 解析が半分や倍のテンポを選んだときの手動の修正。グリッドの頭は変えない。 */
+  /**
+   * BPM の手動の修正。半分や倍を選んだ解析の手直し、タップテンポ、解析できなかった曲への入力に使う。
+   * グリッドの起点は動かさない。×2 してから ½ で戻したとき、位相が元に戻る。
+   * BPM がまだないときは、今の位置を拍の頭にしてグリッドを作る。
+   */
   setBpm(bpm: number): void {
+    const next = Math.min(300, Math.max(30, bpm));
+    if (this._bpm === null) this._firstBeat = normalizeFirstBeat(this.position, next);
+    this._bpm = next;
+    this.onChange.emit();
+  }
+
+  /** グリッドを seconds だけ前後にずらす。検出が少しずれたときの手直し。 */
+  shiftGrid(seconds: number): void {
     if (this._bpm === null) return;
-    this._bpm = Math.min(300, Math.max(30, bpm));
+    this._firstBeat = normalizeFirstBeat(this._firstBeat + seconds, this._bpm);
+    this.onChange.emit();
+  }
+
+  /** 今の位置が拍の頭になるよう、グリッドを合わせる。 */
+  setGridHere(): void {
+    if (this._bpm === null || !this.clock) return;
+    this._firstBeat = normalizeFirstBeat(this.position, this._bpm);
+    this.onChange.emit();
+  }
+
+  /** 曲ごとに覚えておく状態。 */
+  exportState(): TrackState {
+    return {
+      bpm: this._bpm,
+      firstBeat: this._firstBeat,
+      cuePoint: this._cuePoint,
+      hotcues: [...this._hotcues],
+    };
+  }
+
+  /** 前回の手直しを戻す。曲を読み込んだ直後に呼ぶ。 */
+  restore(state: TrackState): void {
+    this._bpm = state.bpm;
+    this._firstBeat = state.firstBeat;
+    this._cuePoint = state.cuePoint;
+    this._hotcues = Array.from({ length: HOTCUE_COUNT }, (_, i) => state.hotcues[i] ?? null);
     this.onChange.emit();
   }
 

@@ -421,6 +421,98 @@ describe('キーロック', () => {
   });
 });
 
+describe('ビートグリッドの編集', () => {
+  const phaseAt = (deck: Deck, time: number) => {
+    const beats = ((time - deck.firstBeat) * deck.bpm!) / 60;
+    return beats - Math.floor(beats);
+  };
+
+  it('グリッドを前後にずらせる', () => {
+    const { deck } = setup(); // 120 BPM、最初の拍 0.25
+    deck.shiftGrid(0.01);
+    expect(deck.firstBeat).toBeCloseTo(0.26);
+    deck.shiftGrid(-0.02);
+    expect(deck.firstBeat).toBeCloseTo(0.24);
+  });
+
+  it('ずらしても 0 以上 1 拍未満に収まり、グリッドは同じ周期を指す', () => {
+    const { deck } = setup();
+    deck.shiftGrid(0.3);
+    expect(deck.firstBeat).toBeGreaterThanOrEqual(0);
+    expect(deck.firstBeat).toBeLessThan(0.5);
+    expect(deck.firstBeat).toBeCloseTo(0.05);
+    deck.shiftGrid(-0.4);
+    expect(deck.firstBeat).toBeCloseTo(0.15);
+  });
+
+  it('今の位置を拍の頭にできる', () => {
+    const { deck } = setup();
+    deck.seek(33.337);
+    deck.setGridHere();
+    expect(phaseAt(deck, 33.337)).toBeCloseTo(0, 6);
+    expect(deck.firstBeat).toBeLessThan(0.5);
+  });
+
+  it('BPM を倍や半分にしても、元の拍はグリッドの上に残る', () => {
+    const { deck } = setup(); // 120 BPM、最初の拍 0.25
+    deck.setBpm(240);
+    expect(phaseAt(deck, 0.25 + 0.5 * 7)).toBeCloseTo(0, 6);
+    deck.setBpm(60);
+    expect(phaseAt(deck, 0.25 + 1 * 8)).toBeCloseTo(0, 6);
+  });
+
+  it('×2 してから ½ で戻すと、グリッドが元どおりになる', () => {
+    const { deck } = setup();
+    const before = deck.exportState();
+    deck.setBpm(deck.bpm! * 2);
+    deck.setBpm(deck.bpm! / 2);
+    expect(deck.exportState()).toEqual(before);
+  });
+
+  it('範囲外の BPM は丸める', () => {
+    const { deck } = setup();
+    deck.setBpm(5);
+    expect(deck.bpm).toBe(30);
+    deck.setBpm(9999);
+    expect(deck.bpm).toBe(300);
+  });
+
+  it('BPM がない曲でも、BPM を入れれば今の位置からグリッドができる', () => {
+    const ctx = new FakeContext();
+    const deck = new Deck('B', ctx as unknown as AudioContext);
+    deck.load(buffer(60), 'no-bpm');
+    deck.seek(10.2);
+    deck.shiftGrid(0.01); // BPM がないうちは何もしない
+    expect(deck.bpm).toBeNull();
+    deck.setBpm(120);
+    expect(deck.bpm).toBe(120);
+    expect(phaseAt(deck, 10.2)).toBeCloseTo(0, 6);
+  });
+
+  it('状態を書き出して、読み込み直した曲へ戻せる', () => {
+    const { deck } = setup();
+    deck.seek(12);
+    deck.hotcue(2);
+    deck.setBpm(125);
+    const saved = deck.exportState();
+    expect(saved).toMatchObject({ bpm: 125 });
+    expect(saved.hotcues[2]).toBeCloseTo(12);
+
+    deck.load(buffer(120), 'same');
+    expect(deck.bpm).toBeNull();
+    deck.restore(saved);
+    expect(deck.exportState()).toEqual(saved);
+  });
+
+  it('復元するホットキューは 8 個に揃える', () => {
+    const { deck } = setup();
+    deck.restore({ bpm: 120, firstBeat: 0, cuePoint: 1, hotcues: [5] });
+    expect(deck.hotcues).toHaveLength(8);
+    expect(deck.hotcues[0]).toBe(5);
+    expect(deck.hotcues[7]).toBeNull();
+  });
+});
+
 describe('テンポと Sync', () => {
   it('nudge は一時的に再生レートを上下させ、0 で元に戻る', () => {
     const { deck } = setup();

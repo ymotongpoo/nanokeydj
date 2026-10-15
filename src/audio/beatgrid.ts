@@ -67,3 +67,39 @@ export function beatLoopRegion(
   if (start < 0) start = 0;
   return { start, end: start + beats * length };
 }
+
+/** firstBeat は 0 以上 1 拍未満に収める。グリッドは周期的なので、どの拍を頭にしても同じ。 */
+export function normalizeFirstBeat(position: number, bpm: number): number {
+  const length = 60 / bpm;
+  return ((position % length) + length) % length;
+}
+
+/** タップの間隔がこの範囲（30〜240 BPM）を外れたら、別のテンポで叩き直したとみなす。 */
+const TAP_MIN_INTERVAL_MS = 250;
+const TAP_MAX_INTERVAL_MS = 2000;
+const TAP_WINDOW = 8;
+
+/**
+ * タップした時刻（ミリ秒）の列から BPM を求める。
+ * 間隔の中央値を使うので、数回のタップのずれに引きずられにくい。
+ * 間隔が 2 つ未満なら null。長く空いたタップは、そこから叩き直したものとして捨てる。
+ */
+export function tapBpm(timestamps: number[]): number | null {
+  const recent: number[] = [];
+  for (let i = timestamps.length - 1; i >= 0 && recent.length < TAP_WINDOW; i--) {
+    const t = timestamps[i]!;
+    const next = recent[0];
+    if (next !== undefined && next - t > TAP_MAX_INTERVAL_MS) break;
+    recent.unshift(t);
+  }
+  const intervals: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    const interval = recent[i]! - recent[i - 1]!;
+    if (interval >= TAP_MIN_INTERVAL_MS) intervals.push(interval);
+  }
+  if (intervals.length < 2) return null;
+  intervals.sort((a, b) => a - b);
+  const mid = Math.floor(intervals.length / 2);
+  const median = intervals.length % 2 ? intervals[mid]! : (intervals[mid - 1]! + intervals[mid]!) / 2;
+  return 60000 / median;
+}
