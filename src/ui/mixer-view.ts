@@ -6,6 +6,7 @@ import type { Controller } from '../control/controller';
 import type { LedFeedback } from '../control/led';
 import { MixRecorder, formatElapsed, recordingFileName } from '../audio/recorder';
 import { bindButton, createSlider } from './controls';
+import { createXyPad } from './xy-pad';
 import { h } from './dom';
 
 const TEMPO_RANGES = [6, 8, 10, 16, 25, 50];
@@ -208,6 +209,9 @@ export function createMixerView(
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
   };
 
+  const xy = createXyPad(registry);
+  updaters.push(xy.update, () => engine.syncEchoTime());
+
   const el = h(
     'section',
     { class: 'panel mixer' },
@@ -215,6 +219,7 @@ export function createMixerView(
     h('div', { class: 'channels' }, channel('A'), h('div', { class: 'master' }, master.el, masterMeter.el), channel('B')),
     crossfader.el,
     h('div', { class: 'headphones' }, headphoneVolume.el, headphoneMix.el),
+    xy.el,
     h(
       'div',
       { class: 'mixer-options' },

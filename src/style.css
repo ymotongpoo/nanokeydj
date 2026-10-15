@@ -517,6 +517,65 @@ select {
   color: #fff;
 }
 
+.fx {
+  display: grid;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.xy-pad {
+  position: relative;
+  height: 96px;
+  background: #0b0c10;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+  background-image: linear-gradient(to right, transparent 49.5%, #2a2d38 49.5% 50.5%, transparent 50.5%);
+}
+
+.xy-pad.active {
+  border-color: var(--accent-a);
+}
+
+.xy-dot {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--accent-a);
+  pointer-events: none;
+}
+
+.xy-label {
+  position: absolute;
+  font-size: 10px;
+  color: #4a4f60;
+  pointer-events: none;
+}
+
+.xy-left {
+  left: 6px;
+  top: 4px;
+}
+
+.xy-right {
+  right: 6px;
+  top: 4px;
+}
+
+.xy-top {
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+}
+
 .headphones {
   display: grid;
   grid-template-columns: 1fr 1fr;

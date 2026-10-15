@@ -15,6 +15,10 @@ function setSmooth(ctx: BaseAudioContext, param: AudioParam, value: number): voi
   param.setTargetAtTime(value, ctx.currentTime, SMOOTHING);
 }
 
+/** エコーの最大の遅延（秒）と、繰り返しの減衰。 */
+const ECHO_MAX_DELAY = 2;
+const ECHO_FEEDBACK = 0.5;
+
 const EQ_FREQ: Record<EqBand, number> = { low: 200, mid: 1000, high: 3500 };
 
 /**
@@ -129,6 +133,12 @@ export class Mixer {
   private masterAnalyser: AnalyserNode;
   private masterSamples: Float32Array<ArrayBuffer>;
 
+  /** マスターエフェクト: X のフィルターと、Y で送るエコー。 */
+  private fxHighpass: BiquadFilterNode;
+  private fxLowpass: BiquadFilterNode;
+  private echoSend: GainNode;
+  private echoDelay: DelayNode;
+
   private headphoneCue: GainNode;
   private headphoneMaster: GainNode;
   private headphoneVolume: GainNode;
@@ -163,7 +173,33 @@ export class Mixer {
 
     this.channels.A.output.connect(this.master);
     this.channels.B.output.connect(this.master);
-    this.master.connect(this.limiter).connect(this.masterOut);
+    // マスターエフェクト。素通しのとき（フィルター中央、エコー 0）は音を変えない。
+    this.fxHighpass = ctx.createBiquadFilter();
+    this.fxHighpass.type = 'highpass';
+    this.fxHighpass.frequency.value = 20;
+    this.fxHighpass.Q.value = 1.2;
+    this.fxLowpass = ctx.createBiquadFilter();
+    this.fxLowpass.type = 'lowpass';
+    this.fxLowpass.frequency.value = 20000;
+    this.fxLowpass.Q.value = 1.2;
+    const fxSum = ctx.createGain();
+    this.master.connect(this.fxHighpass).connect(this.fxLowpass).connect(fxSum);
+
+    // エコー: 遅延の出力を高域を削ってから戻し、繰り返すたびに丸く減衰させる。
+    this.echoSend = ctx.createGain();
+    this.echoSend.gain.value = 0;
+    this.echoDelay = ctx.createDelay(ECHO_MAX_DELAY);
+    this.echoDelay.delayTime.value = 0.375;
+    const echoTone = ctx.createBiquadFilter();
+    echoTone.type = 'lowpass';
+    echoTone.frequency.value = 4000;
+    const echoFeedback = ctx.createGain();
+    echoFeedback.gain.value = ECHO_FEEDBACK;
+    this.master.connect(this.echoSend).connect(this.echoDelay).connect(echoTone);
+    echoTone.connect(echoFeedback).connect(this.echoDelay);
+    echoTone.connect(fxSum);
+
+    fxSum.connect(this.limiter).connect(this.masterOut);
     this.limiter.connect(this.masterAnalyser);
 
     // ヘッドホン: Cue した信号とマスターを混ぜ、音量をかける。
@@ -236,6 +272,21 @@ export class Mixer {
     const { cue, master } = cueMixGains(value);
     setSmooth(this.ctx, this.headphoneCue.gain, cue);
     setSmooth(this.ctx, this.headphoneMaster.gain, master);
+  }
+
+  /**
+   * マスターエフェクト。x はフィルター（0.5 が素通し、左へローパス、右へハイパス）、
+   * y はエコーの量（0 で送らない）。すでに出たエコーは自然に減衰する。
+   */
+  setFx(x: number, y: number): void {
+    const { lowpassHz, highpassHz } = filterCutoffs(x);
+    setSmooth(this.ctx, this.fxLowpass.frequency, lowpassHz);
+    setSmooth(this.ctx, this.fxHighpass.frequency, highpassHz);
+    setSmooth(this.ctx, this.echoSend.gain, Math.min(1, Math.max(0, y)));
+  }
+
+  setEchoTime(seconds: number): void {
+    setSmooth(this.ctx, this.echoDelay.delayTime, Math.min(ECHO_MAX_DELAY, Math.max(0.01, seconds)));
   }
 
   masterLevel(): number {

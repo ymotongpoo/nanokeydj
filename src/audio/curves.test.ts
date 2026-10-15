@@ -3,6 +3,7 @@ import {
   crossfaderGains,
   cueMixGains,
   dbToGain,
+  echoTimeFor,
   eqGainDb,
   filterCutoffs,
   tempoRate,
@@ -122,5 +123,23 @@ describe('cueMixGains', () => {
     expect(cueMixGains(1).master).toBeCloseTo(1);
     const { cue, master } = cueMixGains(0.5);
     expect(cue * cue + master * master).toBeCloseTo(1);
+  });
+});
+
+describe('echoTimeFor', () => {
+  it('3/4 拍の長さにする', () => {
+    expect(echoTimeFor(120)).toBeCloseTo(0.375);
+    expect(echoTimeFor(128)).toBeCloseTo(0.3515625);
+  });
+
+  it('BPM が分からなければ既定値', () => {
+    expect(echoTimeFor(null)).toBe(0.375);
+    expect(echoTimeFor(0)).toBe(0.375);
+    expect(echoTimeFor(NaN)).toBe(0.375);
+  });
+
+  it('極端なテンポでも、遅延を一定の範囲に収める', () => {
+    expect(echoTimeFor(1000)).toBe(0.1);
+    expect(echoTimeFor(10)).toBe(1.5);
   });
 });

@@ -22,7 +22,11 @@ export function bindButton(button: HTMLElement, registry: ControlRegistry, id: s
   };
   button.addEventListener('pointerdown', (event) => {
     event.preventDefault();
-    button.setPointerCapture(event.pointerId);
+    try {
+      button.setPointerCapture(event.pointerId);
+    } catch {
+      // 無効なポインターでも、押下そのものは受け付ける。
+    }
     button.classList.add('pressed');
     registry.dispatch(id, 1);
   });

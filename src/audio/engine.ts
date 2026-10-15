@@ -1,5 +1,6 @@
 import { DECK_IDS, type DeckId } from '../control/controls';
 import { analyzeBpm } from './bpm-client';
+import { echoTimeFor } from './curves';
 import { Deck } from './deck';
 import { Mixer } from './mixer';
 import { mixToMono } from './peaks';
@@ -26,6 +27,7 @@ export class Engine {
   /** キーロック（AudioWorklet）が使えるようになったか。使えない環境では false で解決する。 */
   readonly keylockReady: Promise<boolean>;
   private _quantize = false;
+  private lastEchoTime = 0;
 
   private store = new TrackStore();
   private trackKeys: Record<DeckId, string | null> = { A: null, B: null };
@@ -52,6 +54,14 @@ export class Engine {
     this._quantize = enabled;
     localStorage.setItem(QUANTIZE_STORAGE_KEY, enabled ? '1' : '0');
     for (const id of DECK_IDS) this.decks[id].quantize = enabled;
+  }
+
+  /** エコーの遅延を、フォーカスデッキのテンポに合わせる。毎フレーム呼んでよい。 */
+  syncEchoTime(): void {
+    const time = echoTimeFor(this.decks[this.focused].effectiveBpm);
+    if (Math.abs(time - this.lastEchoTime) < 0.003) return;
+    this.lastEchoTime = time;
+    this.mixer.setEchoTime(time);
   }
 
   /** グリッドやキューの手直しを、少し間を置いて曲ごとに保存する。 */

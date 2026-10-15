@@ -70,6 +70,17 @@ export function cueMixGains(mix: number): { cue: number; master: number } {
   return { cue: Math.cos((m * Math.PI) / 2), master: Math.sin((m * Math.PI) / 2) };
 }
 
+/** BPM が分からないときのエコーの遅延（秒）。 */
+const ECHO_DEFAULT_SECONDS = 0.375;
+const ECHO_MIN_SECONDS = 0.1;
+const ECHO_MAX_SECONDS = 1.5;
+
+/** エコーの遅延。テンポに合わせて 3/4 拍にする。BPM が分からなければ既定値。 */
+export function echoTimeFor(bpm: number | null): number {
+  if (bpm === null || !(bpm > 0)) return ECHO_DEFAULT_SECONDS;
+  return Math.min(ECHO_MAX_SECONDS, Math.max(ECHO_MIN_SECONDS, (60 / bpm) * 0.75));
+}
+
 const TEMPO_DEAD_ZONE = 0.02;
 
 /**

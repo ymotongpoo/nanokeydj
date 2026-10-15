@@ -103,6 +103,12 @@ export function allControlDefs(): ControlDef[] {
       group: focusGroup,
     });
   }
+  const fxGroup = 'FX';
+  defs.push(
+    { id: 'fx.x', label: 'FX X（フィルター）', kind: 'continuous', group: fxGroup, springReturn: true },
+    { id: 'fx.y', label: 'FX Y（エコー）', kind: 'continuous', group: fxGroup, springReturn: true },
+    { id: 'fx.reset', label: 'FX リセット', kind: 'trigger', group: fxGroup },
+  );
   defs.push({
     id: 'modifier.delete',
     label: 'ホットキュー削除（押している間）',

@@ -4,6 +4,10 @@ import type { Engine } from '../audio/engine';
 import { DECK_IDS, EQ_BANDS, HOTCUE_COUNT, JUMP_BEATS, LOOP_BEATS, type DeckId } from './controls';
 import type { ControlRegistry } from './registry';
 
+/** マスターエフェクトの素通しの位置。X は中央、Y（エコー）は 0。 */
+const FX_NEUTRAL_X = 0.5;
+const FX_NEUTRAL_Y = 0;
+
 /** ピッチベンドが中央付近のときは nudge を掛けない。 */
 const NUDGE_DEAD_ZONE = 0.05;
 
@@ -13,6 +17,8 @@ const INITIAL_VALUES: Record<string, number> = {
   'mixer.master': 0.8,
   'mixer.headphone.volume': 0.7,
   'mixer.headphone.mix': 0.5,
+  'fx.x': FX_NEUTRAL_X,
+  'fx.y': FX_NEUTRAL_Y,
 };
 
 /** レジストリのコントロールを、エンジンの操作に結びつける。 */
@@ -59,6 +65,13 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
   registry.setHandler('mixer.master', (v) => engine.mixer.setMaster(v));
   registry.setHandler('mixer.headphone.volume', (v) => engine.mixer.setHeadphoneVolume(v));
   registry.setHandler('mixer.headphone.mix', (v) => engine.mixer.setHeadphoneMix(v));
+  const applyFx = () => engine.mixer.setFx(registry.value('fx.x'), registry.value('fx.y'));
+  registry.setHandler('fx.x', applyFx);
+  registry.setHandler('fx.y', applyFx);
+  registry.setHandler('fx.reset', () => {
+    registry.dispatch('fx.x', FX_NEUTRAL_X);
+    registry.dispatch('fx.y', FX_NEUTRAL_Y);
+  });
   registry.setHandler('focused.play', () => focusedDeck().togglePlay());
   registry.setHandler('focused.cue', (v) => {
     if (v > 0) {
