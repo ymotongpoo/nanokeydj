@@ -79,7 +79,9 @@ Deck: AudioBufferSourceNode → EQ（Low/Mid/High）→ ワンノブフィルタ
 | 3 | クオンタイズ | ホットキュー、ループイン・アウト、Cue の位置を最寄りの拍に揃える入り切り。 |
 | 4 | ミックスの録音 | マスター出力を MediaRecorder で録って、ファイルとして保存する。 |
 
-### 第4段階
+### 第4段階（完了）
+
+いずれも実装済みで、Node のテストと実ブラウザで確認した。フィルターとエコーの効きは OfflineAudioContext で実測した。
 
 | 順 | 項目 | 設計の要点 |
 |---|---|---|
@@ -88,7 +90,8 @@ Deck: AudioBufferSourceNode → EQ（Low/Mid/High）→ ワンノブフィルタ
 
 ### その先
 
-- nanoPAD2 の XY パッドの実機確認（離したときの値の挙動、CC 番号）
+- nanoPAD2 の XY パッドの実機確認（離したときの値の挙動、CC 番号、初期割り当ての追加）
+- ライブラリの曲を、ブラウザを開き直しても残す（File System Access API のハンドルを IndexedDB に保存する）
 - Tauri などで包んだデスクトップ版
 - 実機での初期割り当ての確認と修正（実機が手元に来たら最優先）
 - nanoKONTROL2 の LED 出力の実機確認（既定は切）
