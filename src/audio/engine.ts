@@ -1,5 +1,6 @@
 import { DECK_IDS, type DeckId } from '../control/controls';
 import { analyzeBpm } from './bpm-client';
+import { displayName } from '../library/library';
 import { echoTimeFor } from './curves';
 import { Deck } from './deck';
 import { Mixer } from './mixer';
@@ -107,7 +108,7 @@ export class Engine {
 
   async loadFile(deck: DeckId, file: File): Promise<void> {
     const buffer = await this.decode(await file.arrayBuffer());
-    this.loadBuffer(deck, buffer, file.name.replace(/\.[^.]+$/, ''));
+    this.loadBuffer(deck, buffer, displayName(file));
   }
 
   /** デッキに曲を載せ、BPM の解析を裏で始める。解析中に別の曲へ替わっていたら結果は捨てる。 */

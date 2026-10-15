@@ -2,9 +2,11 @@ import type { Engine } from '../audio/engine';
 import type { Controller } from '../control/controller';
 import { DECK_IDS } from '../control/controls';
 import { computeLedStates, LedFeedback } from '../control/led';
+import type { Library } from '../library/library';
 import type { MidiManager } from '../midi/manager';
 import { createDeckView } from './deck-view';
 import { h } from './dom';
+import { createLibraryView } from './library-view';
 import { createMappingView } from './mapping-view';
 import { createMixerView } from './mixer-view';
 import { createMonitorView } from './monitor-view';
@@ -15,6 +17,7 @@ export function mountApp(
   engine: Engine,
   controller: Controller,
   midi: MidiManager,
+  library: Library,
 ): void {
   const decks = DECK_IDS.map((id) => createDeckView(engine, controller.registry, id));
   const led = new LedFeedback(midi, controller.bindings, () =>
@@ -42,6 +45,7 @@ export function mountApp(
     h('h1', { text: 'nanokeydj' }),
     banner,
     h('div', { class: 'stage' }, decks[0]!.el, mixer.el, decks[1]!.el),
+    createLibraryView(engine, library),
     createMonitorView(midi),
     createMappingView(controller),
   );

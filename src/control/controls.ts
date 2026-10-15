@@ -103,6 +103,14 @@ export function allControlDefs(): ControlDef[] {
       group: focusGroup,
     });
   }
+  const libraryGroup = 'ライブラリ';
+  defs.push(
+    { id: 'library.prev', label: '前の曲を選ぶ', kind: 'trigger', group: libraryGroup },
+    { id: 'library.next', label: '次の曲を選ぶ', kind: 'trigger', group: libraryGroup },
+    { id: 'library.load.A', label: '選んだ曲を Deck A へ', kind: 'trigger', group: libraryGroup },
+    { id: 'library.load.B', label: '選んだ曲を Deck B へ', kind: 'trigger', group: libraryGroup },
+  );
+
   const fxGroup = 'FX';
   defs.push(
     { id: 'fx.x', label: 'FX X（フィルター）', kind: 'continuous', group: fxGroup, springReturn: true },

@@ -1,6 +1,8 @@
 import { tempoRate } from '../audio/curves';
 import type { Deck } from '../audio/deck';
 import type { Engine } from '../audio/engine';
+import type { Library } from '../library/library';
+import { loadSelected } from '../library/loader';
 import { DECK_IDS, EQ_BANDS, HOTCUE_COUNT, JUMP_BEATS, LOOP_BEATS, type DeckId } from './controls';
 import type { ControlRegistry } from './registry';
 
@@ -22,7 +24,7 @@ const INITIAL_VALUES: Record<string, number> = {
 };
 
 /** レジストリのコントロールを、エンジンの操作に結びつける。 */
-export function wireControls(registry: ControlRegistry, engine: Engine): void {
+export function wireControls(registry: ControlRegistry, engine: Engine, library: Library): void {
   const focusedDeck = () => engine.decks[engine.focused];
   /** Cue を押している間のデッキ。押している間にフォーカスが替わっても、同じデッキを離す。 */
   let cueHeld: Deck | null = null;
@@ -65,6 +67,11 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
   registry.setHandler('mixer.master', (v) => engine.mixer.setMaster(v));
   registry.setHandler('mixer.headphone.volume', (v) => engine.mixer.setHeadphoneVolume(v));
   registry.setHandler('mixer.headphone.mix', (v) => engine.mixer.setHeadphoneMix(v));
+  registry.setHandler('library.prev', () => library.move(-1));
+  registry.setHandler('library.next', () => library.move(1));
+  registry.setHandler('library.load.A', () => void loadSelected(engine, library, 'A'));
+  registry.setHandler('library.load.B', () => void loadSelected(engine, library, 'B'));
+
   const applyFx = () => engine.mixer.setFx(registry.value('fx.x'), registry.value('fx.y'));
   registry.setHandler('fx.x', applyFx);
   registry.setHandler('fx.y', applyFx);
