@@ -68,7 +68,9 @@ Deck: AudioBufferSourceNode → EQ（Low/Mid/High）→ ワンノブフィルタ
 | 3 | キーロック | 時間伸縮を WSOLA で実装する。核は DOM と Web Audio に依存しない純粋なクラスにして Node で検証し、AudioWorklet から呼ぶ。位置の管理は今の PlaybackClock をそのまま使い、ワークレットは「開始位置とレートとループ範囲」だけを受け取って再生する。キーロックの切り替えは Deck ごとにする。ブラウザの実測で、+8 % のとき 440 Hz が 475.2 Hz（オフ）から 439.98 Hz（オン）になり、到達時刻は通常の経路と一致した。 |
 | 4 | nanoKONTROL2 の LED | MIDI 出力ポートを持たせ、Play / Cue / Sync の状態を同じ CC 番号で返す。KONTROL Editor で LED モードを外部制御にする必要があり、実機で未確認なので、画面のチェックボックスで入り切りできるようにして既定は切にする。 |
 
-### 第3段階
+### 第3段階（完了）
+
+いずれも実装済みで、Node のテストと実ブラウザで確認した。ヘッドホン Cue の4chは、4ch の OfflineAudioContext で信号経路を実測した。
 
 | 順 | 項目 | 設計の要点 |
 |---|---|---|
