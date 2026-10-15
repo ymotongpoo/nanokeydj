@@ -1,7 +1,11 @@
 import { tempoRate } from '../audio/curves';
+import type { Deck } from '../audio/deck';
 import type { Engine } from '../audio/engine';
-import { DECK_IDS, EQ_BANDS, type DeckId } from './controls';
+import { DECK_IDS, EQ_BANDS, HOTCUE_COUNT, JUMP_BEATS, LOOP_BEATS, type DeckId } from './controls';
 import type { ControlRegistry } from './registry';
+
+/** ピッチベンドが中央付近のときは nudge を掛けない。 */
+const NUDGE_DEAD_ZONE = 0.05;
 
 /** 連続値コントロールの起動時の値。実機のフェーダー位置とは無関係に、安全な位置から始める。 */
 const INITIAL_VALUES: Record<string, number> = {
@@ -12,6 +16,8 @@ const INITIAL_VALUES: Record<string, number> = {
 /** レジストリのコントロールを、エンジンの操作に結びつける。 */
 export function wireControls(registry: ControlRegistry, engine: Engine): void {
   const focusedDeck = () => engine.decks[engine.focused];
+  /** Cue を押している間のデッキ。押している間にフォーカスが替わっても、同じデッキを離す。 */
+  let cueHeld: Deck | null = null;
 
   for (const id of DECK_IDS) {
     const deck = engine.decks[id];
@@ -27,7 +33,15 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
       registry.setHandler(`mixer.${id}.eq.${band}`, (v) => strip.setEq(band, v));
     }
     registry.setHandler(`mixer.${id}.filter`, (v) => strip.setFilter(v));
+    registry.setHandler(`deck.${id}.cue`, (v) => (v > 0 ? deck.cuePress() : deck.cueRelease()));
+    for (let n = 1; n <= HOTCUE_COUNT; n++) {
+      registry.setHandler(`deck.${id}.hotcue.${n}`, () => {
+        if (registry.value('modifier.delete') > 0) deck.clearHotcue(n - 1);
+        else deck.hotcue(n - 1);
+      });
+    }
     registry.setHandler(`focus.${id}`, () => {
+      if (engine.focused !== id) focusedDeck().setNudge(0);
       engine.focused = id;
     });
 
@@ -40,6 +54,26 @@ export function wireControls(registry: ControlRegistry, engine: Engine): void {
   registry.setHandler('mixer.crossfader', (v) => engine.mixer.setCrossfader(v));
   registry.setHandler('mixer.master', (v) => engine.mixer.setMaster(v));
   registry.setHandler('focused.play', () => focusedDeck().togglePlay());
+  registry.setHandler('focused.cue', (v) => {
+    if (v > 0) {
+      cueHeld = focusedDeck();
+      cueHeld.cuePress();
+    } else {
+      cueHeld?.cueRelease();
+      cueHeld = null;
+    }
+  });
+  registry.setHandler('focused.nudge', (v) => {
+    const offset = (v - 0.5) * 2;
+    focusedDeck().setNudge(Math.abs(offset) < NUDGE_DEAD_ZONE ? 0 : offset);
+  });
+  registry.setHandler('focused.loop.exit', () => focusedDeck().exitLoop());
+  for (const beats of LOOP_BEATS) {
+    registry.setHandler(`focused.loop.${beats}`, () => focusedDeck().beatLoop(beats));
+  }
+  for (const beats of JUMP_BEATS) {
+    registry.setHandler(`focused.jump.${beats}`, () => focusedDeck().beatJump(beats));
+  }
   registry.setHandler('focused.sync', () => {
     const deck = focusedDeck();
     deck.sync(engine.decks[otherDeck(deck.id)]);

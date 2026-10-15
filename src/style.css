@@ -435,3 +435,36 @@ select {
   padding: 1px 6px;
   font-size: 12px;
 }
+
+.hotcue-row,
+.loop-row {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hotcue-row {
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.loop-row {
+  grid-template-columns: repeat(8, 1fr);
+}
+
+.btn-hotcue,
+.btn-loop {
+  padding: 6px 0;
+  font-size: 12px;
+  user-select: none;
+  touch-action: none;
+}
+
+.btn-hotcue.set {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-hotcue.set.active,
+.btn-hotcue.set.pressed {
+  color: #06121a;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatPhase, beatTimesIn, nearestBeat, phaseCorrection } from './beatgrid';
+import { beatLoopRegion, beatPhase, beatTimesIn, nearestBeat, phaseCorrection } from './beatgrid';
 
 describe('beatPhase', () => {
   it('拍の頭で 0、半拍で 0.5', () => {
@@ -52,5 +52,38 @@ describe('phaseCorrection', () => {
   it('補正後は位相が一致する', () => {
     const shift = phaseCorrection(3.37, 0.12, 124, 10.61, 0.3, 128);
     expect(beatPhase(3.37 + shift, 0.12, 124)).toBeCloseTo(beatPhase(10.61, 0.3, 128), 6);
+  });
+});
+
+describe('beatLoopRegion', () => {
+  it('4 拍ループは位置の手前の拍から 4 拍分', () => {
+    const { start, end } = beatLoopRegion(10.3, 0.15, 120, 4);
+    expect(start).toBeCloseTo(10.15);
+    expect(end).toBeCloseTo(12.15);
+  });
+
+  it('半拍ループは半拍の区切りに揃え、位置を含む', () => {
+    const { start, end } = beatLoopRegion(10.3, 0.15, 120, 0.5);
+    expect(start).toBeCloseTo(10.15);
+    expect(end).toBeCloseTo(10.4);
+    const later = beatLoopRegion(10.42, 0.15, 120, 0.5);
+    expect(later.start).toBeCloseTo(10.4);
+    expect(later.end).toBeCloseTo(10.65);
+  });
+
+  it('どの位置でもループが位置を含む', () => {
+    for (const beats of [0.5, 1, 2, 4, 8, 16, 32]) {
+      for (let p = 0.2; p < 40; p += 0.137) {
+        const { start, end } = beatLoopRegion(p, 0.31, 127, beats);
+        expect(start).toBeLessThanOrEqual(p + 1e-9);
+        expect(end).toBeGreaterThan(p);
+        expect(end - start).toBeCloseTo((beats * 60) / 127);
+      }
+    }
+  });
+
+  it('曲頭より前に始点が出ない', () => {
+    const { start } = beatLoopRegion(0.05, 0.4, 120, 4);
+    expect(start).toBeGreaterThanOrEqual(0);
   });
 });

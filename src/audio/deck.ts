@@ -1,10 +1,13 @@
-import type { DeckId } from '../control/controls';
+import { HOTCUE_COUNT, type DeckId } from '../control/controls';
 import { Emitter } from '../util/emitter';
-import { phaseCorrection } from './beatgrid';
+import { beatLoopRegion, phaseCorrection } from './beatgrid';
 import { PlaybackClock, type LoopRegion } from './clock';
 
 /** nudge（一時的なテンポ微調整）の最大幅。±5 %。 */
 const NUDGE_DEPTH = 0.05;
+
+/** Cue ボタンで、いまの位置がキューポイント上にあるとみなす許容幅（秒）。 */
+const CUE_EPSILON = 0.03;
 
 export interface DeckSnapshot {
   loaded: boolean;
@@ -19,6 +22,8 @@ export interface DeckSnapshot {
   bpm: number | null;
   firstBeat: number;
   analyzing: boolean;
+  cuePoint: number;
+  hotcues: (number | null)[];
 }
 
 /** 1 台のデッキ。バッファを再生し、位置とテンポとループを管理する。 */
@@ -36,6 +41,9 @@ export class Deck {
   private _bpm: number | null = null;
   private _firstBeat = 0;
   private _analyzing = false;
+  private _cuePoint = 0;
+  private _hotcues: (number | null)[] = Array.from({ length: HOTCUE_COUNT }, () => null);
+  private previewing = false;
 
   constructor(
     readonly id: DeckId,
@@ -91,6 +99,14 @@ export class Deck {
     return this._analyzing;
   }
 
+  get cuePoint(): number {
+    return this._cuePoint;
+  }
+
+  get hotcues(): readonly (number | null)[] {
+    return this._hotcues;
+  }
+
   get loop(): LoopRegion | null {
     return this.clock?.loop ?? null;
   }
@@ -112,6 +128,8 @@ export class Deck {
       bpm: this._bpm,
       firstBeat: this._firstBeat,
       analyzing: this._analyzing,
+      cuePoint: this._cuePoint,
+      hotcues: [...this._hotcues],
     };
   }
 
@@ -124,6 +142,9 @@ export class Deck {
     this._bpm = null;
     this._firstBeat = 0;
     this._analyzing = false;
+    this._cuePoint = 0;
+    this._hotcues = this._hotcues.map(() => null);
+    this.previewing = false;
     this.onChange.emit();
   }
 
@@ -135,6 +156,8 @@ export class Deck {
   setAnalysis(bpm: number, firstBeat: number): void {
     this._bpm = bpm;
     this._firstBeat = firstBeat;
+    // 自分で打っていなければ、キューポイントは最初の拍に置く。
+    if (this._cuePoint === 0) this._cuePoint = firstBeat;
     this.onChange.emit();
   }
 
@@ -186,8 +209,89 @@ export class Deck {
   }
 
   togglePlay(): void {
+    if (this.previewing) {
+      // Cue を押したまま Play を押すと、Cue を離しても再生を続ける。
+      this.previewing = false;
+      return;
+    }
     if (this.playing) this.pause();
     else this.play();
+  }
+
+  /**
+   * CDJ 方式の Cue。再生中ならキューポイントへ戻って止まる。
+   * 止まっていて位置がキューポイントなら、押している間だけ再生する。
+   * 止まっていてキューポイントから離れていれば、そこを新しいキューポイントにする。
+   */
+  cuePress(): void {
+    if (!this.clock) return;
+    if (this.playing) {
+      this.pause();
+      this.seek(this._cuePoint);
+    } else if (Math.abs(this.position - this._cuePoint) < CUE_EPSILON) {
+      this.previewing = true;
+      this.play();
+    } else {
+      this._cuePoint = this.position;
+      this.onChange.emit();
+    }
+  }
+
+  cueRelease(): void {
+    if (!this.previewing) return;
+    this.previewing = false;
+    this.pause();
+    this.seek(this._cuePoint);
+  }
+
+  /** 空きなら今の位置に打つ。打ってあれば、そこへ飛んで再生する。 */
+  hotcue(index: number): void {
+    if (!this.clock || index < 0 || index >= HOTCUE_COUNT) return;
+    const cue = this._hotcues[index];
+    if (cue === null || cue === undefined) {
+      this._hotcues[index] = this.position;
+      this.onChange.emit();
+      return;
+    }
+    this.seek(cue);
+    this.play();
+  }
+
+  clearHotcue(index: number): void {
+    if (index < 0 || index >= HOTCUE_COUNT || this._hotcues[index] === null) return;
+    this._hotcues[index] = null;
+    this.onChange.emit();
+  }
+
+  /** beats 拍のループを入れる。同じ長さのループが入っていれば解除する。 */
+  beatLoop(beats: number): void {
+    if (!this.clock || this._bpm === null) return;
+    const active = this.loop;
+    const length = (beats * 60) / this._bpm;
+    if (active && Math.abs(active.end - active.start - length) < 1e-6) {
+      this.setLoop(null);
+      return;
+    }
+    this.setLoop(beatLoopRegion(this.position, this._firstBeat, this._bpm, beats));
+  }
+
+  exitLoop(): void {
+    if (this.loop) this.setLoop(null);
+  }
+
+  /** 拍の数だけ位置を前後させる。ループ中はループも一緒に動かす。曲の外に出るなら何もしない。 */
+  beatJump(beats: number): void {
+    if (!this.clock || this._bpm === null) return;
+    const offset = (beats * 60) / this._bpm;
+    const loop = this.loop;
+    const target = this.position + offset;
+    if (target < 0 || target >= this.duration) return;
+    if (loop) {
+      const shifted = { start: loop.start + offset, end: loop.end + offset };
+      if (shifted.start < 0 || shifted.end > this.duration) return;
+      this.setLoop(shifted);
+    }
+    this.seek(target);
   }
 
   seek(position: number): void {

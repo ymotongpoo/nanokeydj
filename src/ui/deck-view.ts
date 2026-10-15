@@ -2,7 +2,7 @@ import { createDemoBuffer, DEMO_TRACKS } from '../audio/demo';
 import type { Engine } from '../audio/engine';
 import { beatTimesIn } from '../audio/beatgrid';
 import { computePeaks, mixToMono, type Peaks } from '../audio/peaks';
-import type { DeckId } from '../control/controls';
+import { HOTCUE_COUNT, LOOP_BEATS, type DeckId } from '../control/controls';
 import type { ControlRegistry } from '../control/registry';
 import { bindButton, createSlider, formatTime } from './controls';
 import { h } from './dom';
@@ -67,6 +67,35 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
   });
   updaters.push(tempo.update);
 
+  const hotcueButtons = Array.from({ length: HOTCUE_COUNT }, (_, i) => {
+    const button = h('button', {
+      class: 'btn-hotcue',
+      text: String(i + 1),
+      attrs: { title: 'クリックで打つ／飛ぶ。右クリックで削除' },
+    });
+    updaters.push(bindButton(button, registry, `deck.${id}.hotcue.${i + 1}`));
+    button.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      deck.clearHotcue(i);
+    });
+    return button;
+  });
+
+  const loopButtons = LOOP_BEATS.map((beats) => {
+    const button = h('button', {
+      class: 'btn-loop',
+      text: beats === 0.5 ? '½' : String(beats),
+      attrs: { title: `${beats} 拍のループ` },
+      on: { click: () => deck.beatLoop(beats) },
+    });
+    return { beats, button };
+  });
+  const loopExit = h('button', {
+    class: 'btn-loop',
+    text: 'Exit',
+    on: { click: () => deck.exitLoop() },
+  });
+
   const fileInput = h('input', { attrs: { type: 'file', accept: 'audio/*', hidden: '' } });
   const loadFile = async (file: File) => {
     status.textContent = '読み込み中…';
@@ -109,6 +138,8 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
       tempo.el,
     ),
     h('div', { class: 'transport' }, play, cue, sync),
+    h('div', { class: 'hotcue-row' }, ...hotcueButtons),
+    h('div', { class: 'loop-row' }, ...loopButtons.map((l) => l.button), loopExit),
     h('div', { class: 'load-row' }, loadButton, demoButton, status, fileInput),
   );
 
@@ -150,6 +181,18 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
     elapsed.textContent = formatTime(snapshot.position);
     remaining.textContent = `-${formatTime(snapshot.duration - snapshot.position)}`;
 
+    hotcueButtons.forEach((button, i) => {
+      const time = snapshot.hotcues[i];
+      button.classList.toggle('set', time !== null && time !== undefined);
+    });
+    for (const { beats, button } of loopButtons) {
+      const active =
+        snapshot.loop !== null &&
+        snapshot.bpm !== null &&
+        Math.abs(snapshot.loop.end - snapshot.loop.start - (beats * 60) / snapshot.bpm) < 1e-6;
+      button.classList.toggle('active', active);
+    }
+
     fitCanvas(zoom);
     fitCanvas(overview);
     if (mono) {
@@ -161,6 +204,12 @@ export function createDeckView(engine: Engine, registry: ControlRegistry, id: De
           position: snapshot.position,
           windowSeconds: ZOOM_SECONDS,
           loop: snapshot.loop,
+          cues: [
+            { time: snapshot.cuePoint, label: 'C' },
+            ...snapshot.hotcues.flatMap((time, i) =>
+              time === null ? [] : [{ time, label: String(i + 1) }],
+            ),
+          ],
           beatTimes:
             snapshot.bpm === null
               ? undefined

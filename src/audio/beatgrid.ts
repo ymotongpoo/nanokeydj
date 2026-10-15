@@ -43,3 +43,27 @@ export function phaseCorrection(
   if (delta <= -0.5) delta += 1;
   return (delta * 60) / bpm;
 }
+
+export interface BeatLoopRegion {
+  start: number;
+  end: number;
+}
+
+/**
+ * 再生位置を含むビートループの範囲。
+ * 始点は拍（1 拍未満のループはそのループ長）の区切りに揃え、終点は始点から beats 拍先にする。
+ * 位置を含むように前側へ丸めるので、ループを入れた瞬間に位置が跳ばない。
+ */
+export function beatLoopRegion(
+  position: number,
+  firstBeat: number,
+  bpm: number,
+  beats: number,
+): BeatLoopRegion {
+  const length = 60 / bpm;
+  const step = Math.min(1, beats) * length;
+  let start = firstBeat + Math.floor((position - firstBeat) / step) * step;
+  // グリッドより前の位置（イントロなど）では、曲頭から始める。
+  if (start < 0) start = 0;
+  return { start, end: start + beats * length };
+}
