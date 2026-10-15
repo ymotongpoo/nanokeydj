@@ -182,3 +182,237 @@ button:hover {
   padding: 2px 8px;
   font-size: 12px;
 }
+
+.audio-banner {
+  background: #4a3a12;
+  border-color: #8a6d1f;
+  color: #ffd98a;
+  padding: 10px 16px;
+  text-align: left;
+}
+
+.audio-banner[hidden] {
+  display: none;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.deck-A {
+  --accent: var(--accent-a);
+}
+
+.deck-B {
+  --accent: var(--accent-b);
+}
+
+.deck.focused {
+  border-color: var(--accent);
+}
+
+.deck-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.deck-title {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.deck-track {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deck-tempo {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+.deck-main {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 8px;
+}
+
+.deck-waves {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wave-zoom,
+.wave-overview {
+  width: 100%;
+  background: #0b0c10;
+  border-radius: 4px;
+  display: block;
+}
+
+.wave-zoom {
+  height: 110px;
+}
+
+.wave-overview {
+  height: 44px;
+  cursor: pointer;
+}
+
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.time-remaining {
+  color: var(--muted);
+}
+
+.transport,
+.load-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.transport button {
+  flex: 1;
+  padding: 10px 0;
+  font-weight: 600;
+  user-select: none;
+  touch-action: none;
+}
+
+button.active,
+button.pressed {
+  background: var(--accent, var(--accent-a));
+  border-color: var(--accent, var(--accent-a));
+  color: #06121a;
+}
+
+.deck-status {
+  color: #ffb4a8;
+  font-size: 12px;
+}
+
+.control {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.control-label {
+  text-align: center;
+}
+
+.slider {
+  width: 100%;
+  accent-color: var(--accent, var(--accent-a));
+}
+
+.slider-vertical {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 24px;
+  height: 100%;
+  min-height: 160px;
+  justify-self: center;
+}
+
+.control-tempo {
+  grid-template-rows: auto 1fr;
+}
+
+.channels {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr;
+  gap: 8px;
+}
+
+.channel {
+  display: grid;
+  gap: 6px;
+}
+
+.channel h3 {
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+
+.channel-A {
+  --accent: var(--accent-a);
+}
+
+.channel-B {
+  --accent: var(--accent-b);
+}
+
+.fader-row {
+  display: grid;
+  grid-template-columns: 1fr 10px;
+  gap: 6px;
+  height: 180px;
+}
+
+.master {
+  display: grid;
+  grid-template-columns: 1fr 10px;
+  gap: 4px;
+  height: 220px;
+  margin-top: 24px;
+}
+
+.meter {
+  background: #0b0c10;
+  border-radius: 3px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.meter-fill {
+  width: 100%;
+  background: linear-gradient(to top, var(--ok), #f5d04c 75%, #ff5a5a);
+  transition: height 40ms linear;
+}
+
+.control-crossfader {
+  margin-top: 12px;
+}
+
+.mixer-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+select {
+  background: #262a36;
+  color: var(--text);
+  border: 1px solid #3a3f50;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+@media (max-width: 1000px) {
+  .stage {
+    grid-template-columns: 1fr;
+  }
+}

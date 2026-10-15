@@ -1,0 +1,162 @@
+import { createDemoBuffer, DEMO_TRACKS } from '../audio/demo';
+import type { Engine } from '../audio/engine';
+import { computePeaks, mixToMono, type Peaks } from '../audio/peaks';
+import type { DeckId } from '../control/controls';
+import type { ControlRegistry } from '../control/registry';
+import { bindButton, createSlider, formatTime } from './controls';
+import { h } from './dom';
+import { drawOverview, drawZoom, fitCanvas, type Colors } from './waveform';
+
+const ZOOM_SECONDS = 6;
+
+const COLORS: Record<DeckId, Colors> = {
+  A: { wave: '#35b6ff', dim: '#1b5a80', accent: '#35b6ff' },
+  B: { wave: '#ff6b9a', dim: '#80354d', accent: '#ff6b9a' },
+};
+
+export interface DeckView {
+  el: HTMLElement;
+  update(): void;
+}
+
+export function createDeckView(engine: Engine, registry: ControlRegistry, id: DeckId): DeckView {
+  const deck = engine.decks[id];
+  const colors = COLORS[id];
+
+  let peaks: Peaks | null = null;
+  let mono: Float32Array | null = null;
+  let analyzed: AudioBuffer | null = null;
+
+  const title = h('span', { class: 'deck-title', text: `Deck ${id}` });
+  const trackName = h('span', { class: 'deck-track', text: '曲が読み込まれていません' });
+  const tempoText = h('span', { class: 'deck-tempo', text: '+0.0%' });
+  const status = h('span', { class: 'deck-status' });
+
+  const zoom = h('canvas', { class: 'wave-zoom' });
+  const overview = h('canvas', { class: 'wave-overview' });
+  const elapsed = h('span', { class: 'time', text: '0:00.0' });
+  const remaining = h('span', { class: 'time time-remaining', text: '-0:00.0' });
+
+  const play = h('button', { class: 'btn-play', text: '▶ Play' });
+  const cue = h('button', { class: 'btn-cue', text: 'Cue' });
+  const sync = h('button', { class: 'btn-sync', text: 'Sync' });
+
+  const updaters: (() => void)[] = [
+    bindButton(play, registry, `deck.${id}.play`),
+    bindButton(cue, registry, `deck.${id}.cue`),
+    bindButton(sync, registry, `deck.${id}.sync`),
+  ];
+  const tempo = createSlider(registry, `deck.${id}.tempo`, {
+    label: 'Tempo',
+    orient: 'vertical',
+    className: 'control-tempo',
+  });
+  updaters.push(tempo.update);
+
+  const fileInput = h('input', { attrs: { type: 'file', accept: 'audio/*', hidden: '' } });
+  const loadFile = async (file: File) => {
+    status.textContent = '読み込み中…';
+    try {
+      await engine.resume();
+      await engine.loadFile(id, file);
+      status.textContent = '';
+    } catch (error) {
+      status.textContent = `読み込めませんでした: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  };
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) void loadFile(file);
+    fileInput.value = '';
+  });
+  const loadButton = h('button', { text: '曲を読み込む', on: { click: () => fileInput.click() } });
+  const demoButton = h('button', {
+    text: 'デモ曲',
+    on: {
+      click: () => {
+        void engine.resume();
+        deck.load(createDemoBuffer(engine.ctx, DEMO_TRACKS[id]), DEMO_TRACKS[id].name);
+      },
+    },
+  });
+
+  overview.addEventListener('pointerdown', (event) => {
+    if (!deck.loaded) return;
+    const rect = overview.getBoundingClientRect();
+    deck.seek(((event.clientX - rect.left) / rect.width) * deck.duration);
+  });
+
+  const el = h(
+    'section',
+    { class: `panel deck deck-${id}` },
+    h('header', {}, h('div', { class: 'deck-heading' }, title, trackName), h('div', {}, tempoText)),
+    h('div', { class: 'deck-main' },
+      h('div', { class: 'deck-waves' }, zoom, overview, h('div', { class: 'time-row' }, elapsed, remaining)),
+      tempo.el,
+    ),
+    h('div', { class: 'transport' }, play, cue, sync),
+    h('div', { class: 'load-row' }, loadButton, demoButton, status, fileInput),
+  );
+
+  el.addEventListener('dragover', (event) => event.preventDefault());
+  el.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const file = event.dataTransfer?.files[0];
+    if (file) void loadFile(file);
+  });
+
+  const refreshAnalysis = () => {
+    const buffer = deck.audio;
+    if (buffer === analyzed) return;
+    analyzed = buffer;
+    if (!buffer) {
+      peaks = null;
+      mono = null;
+      trackName.textContent = '曲が読み込まれていません';
+      return;
+    }
+    mono = mixToMono(buffer);
+    peaks = computePeaks(mono, 1200);
+    trackName.textContent = deck.name;
+  };
+
+  const update = () => {
+    refreshAnalysis();
+    for (const updater of updaters) updater();
+
+    const snapshot = deck.snapshot();
+    el.classList.toggle('focused', engine.focused === id);
+    play.textContent = snapshot.playing ? '❚❚ Pause' : '▶ Play';
+    tempoText.textContent = `${snapshot.rate >= 1 ? '+' : ''}${((snapshot.rate - 1) * 100).toFixed(1)}%`;
+    elapsed.textContent = formatTime(snapshot.position);
+    remaining.textContent = `-${formatTime(snapshot.duration - snapshot.position)}`;
+
+    fitCanvas(zoom);
+    fitCanvas(overview);
+    if (mono) {
+      drawZoom(
+        zoom,
+        {
+          samples: mono,
+          sampleRate: deck.audio!.sampleRate,
+          position: snapshot.position,
+          windowSeconds: ZOOM_SECONDS,
+          loop: snapshot.loop,
+        },
+        colors,
+      );
+    } else {
+      zoom.getContext('2d')?.clearRect(0, 0, zoom.width, zoom.height);
+    }
+    drawOverview(
+      overview,
+      peaks,
+      snapshot.duration > 0 ? snapshot.position / snapshot.duration : 0,
+      snapshot.loop,
+      snapshot.duration,
+      colors,
+    );
+  };
+
+  return { el, update };
+}
