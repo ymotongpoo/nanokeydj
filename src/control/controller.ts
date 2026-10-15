@@ -1,6 +1,6 @@
 import { Emitter } from '../util/emitter';
 import type { MidiManager } from '../midi/manager';
-import { Bindings, eventToInput, type Binding } from './bindings';
+import { Bindings, eventToInput, type Binding, type MidiSource } from './bindings';
 import { defaultBindings } from './defaults';
 import { Learner } from './learner';
 import { ControlRegistry } from './registry';
@@ -45,7 +45,7 @@ export class Controller {
     });
   }
 
-  handleInput(source: Parameters<Bindings['resolve']>[0], value: number): void {
+  handleInput(source: MidiSource, value: number): void {
     if (this.learner.handleInput(source, value)) return;
     const control = this.bindings.resolve(source);
     if (control) this.registry.dispatch(control, value);

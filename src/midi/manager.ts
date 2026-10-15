@@ -26,7 +26,8 @@ export class MidiManager {
   readonly onStatusChanged = new Emitter<MidiStatus>();
 
   private access: MIDIAccess | null = null;
-  private attached = new Set<string>();
+  /** ハンドラーを付けた入力ポート。再接続でブラウザが別のオブジェクトを渡してきても付け直せるよう、実体で覚える。 */
+  private attached = new Map<string, MIDIInput>();
   private _status: MidiStatus = 'idle';
 
   get status(): MidiStatus {
@@ -79,8 +80,8 @@ export class MidiManager {
   private scan(): void {
     if (!this.access) return;
     for (const input of this.access.inputs.values()) {
-      if (this.attached.has(input.id)) continue;
-      this.attached.add(input.id);
+      if (this.attached.get(input.id) === input) continue;
+      this.attached.set(input.id, input);
       const name = input.name ?? '';
       const device = identifyDevice(name);
       input.onmidimessage = (event) => {
